@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Guardian AI" src="client/src/images/logo.svg" width="300px">
+  <img alt="Guardian AI" src="Client/src/images/logo.svg" width="300px">
 </p>
 
 <h3 align="center">Guardian AI</h3>
