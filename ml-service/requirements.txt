@@ -1,0 +1,10 @@
+numpy
+pandas
+requests
+tensorflow
+scikit-learn
+fastapi
+uvicorn
+pydantic
+grpcio
+grpcio-tools

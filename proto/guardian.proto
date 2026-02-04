@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package guardian;
+
+option go_package = "github.com/yourusername/guardian-ai/proto";
+
+service GuardianAI {
+  rpc PredictDomain(DomainRequest) returns (PredictionResponse) {}
+}
+
+message DomainRequest {
+  string domain = 1;
+}
+
+message PredictionResponse {
+  bool is_malicious = 1;
+  float confidence_score = 2;
+  string category = 3;
+}

@@ -1,0 +1,31 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+.venv/
+env/
+
+# --- Machine Learning Artifacts ---
+# Ignore datasets and heavy models (Too big for Git)
+*.csv
+*.h5
+*.pickle
+*.tflite
+*.onnx
+
+# --- Go ---
+# Binaries
+*.exe
+*.test
+*.prof
+
+# Modules
+vendor/
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
