@@ -10,10 +10,4 @@
   A forensic-grade network shield that integrates a CNN-LSTM Deep Learning model directly into the DNS resolution pipeline.
 </p>
 
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#architecture">Architecture</a>
-</p>
-
 ---
