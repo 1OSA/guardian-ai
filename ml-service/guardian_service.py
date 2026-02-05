@@ -1,3 +1,9 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
+import logging
 import pickle
 from contextlib import asynccontextmanager
 
@@ -7,6 +13,9 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
+logging.getLogger("absl").setLevel(logging.ERROR)
 
 # --- CONFIG ---
 MAX_LEN = 75
@@ -86,12 +95,15 @@ async def predict_domain(request: DomainRequest):
         "result": verdict,
         "block": is_blocked,  # explicit python bool
         "confidence": round(confidence * 100, 2),
-        "probabilities": {
-            "safe": float(prediction[0][0]),  # explicit python float
-            "dga": float(prediction[0][1]),  # explicit python float
-            "phishing": float(prediction[0][2]),  # explicit python float
-        },
     }
+
+    # --- LAZY TESTING ENDPOINT ---
+    # Allows: curl "http://localhost:5000/check?d=google.com"
+
+
+@app.get("/check")
+async def check_domain_get(d: str):
+    return await predict_domain(DomainRequest(domain=d))
 
 
 if __name__ == "__main__":

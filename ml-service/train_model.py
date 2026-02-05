@@ -70,9 +70,15 @@ def train():
         ("amaz0n.com", 2),
         ("app1e.com", 2),
         ("apple-support.com", 2),
+        ("secure-account-verification-paypal.com", 2),
+        ("secure-account-verification-paypal.com", 2),
+        ("apple-id-support-urgent.net", 2),
+        ("apple-id-support-urgent.net", 2),
+        ("microsoft-online-security.com", 2),
+        ("microsoft-online-security.com", 2),
     ]
     for pattern in bad_patterns:
-        bad_injection.extend([pattern] * 200)  # Show 'rnicrosoft' 200 times as Bad
+        bad_injection.extend([pattern] * 200)
 
     # Add to dataframe
     df_inject = pd.DataFrame(
