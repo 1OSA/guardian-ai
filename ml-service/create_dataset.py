@@ -261,8 +261,8 @@ def generate_attacks(domain_list, num_needed):
             continue
 
         # Strategies:
-        # idn: Swap latin chars for Cyrillic/Greek lookalikes (The "Russian" Attack)
-        # visual: Swap chars for ASCII lookalikes (l33t speak)
+        # idn: Swap latin chars for Cyrillic/Greek lookalikes
+        # visual: Swap chars for ASCII lookalikes
         # typo: Fat finger / omission
         strategy = random.choice(["idn", "visual", "typo"])
         new_name = list(name)

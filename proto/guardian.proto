@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package guardian;
 
-option go_package = "github.com/yourusername/guardian-ai/proto";
+option go_package = "github.com/1OSA/guardian-ai/proto";
 
 service GuardianAI {
   rpc PredictDomain(DomainRequest) returns (PredictionResponse) {}
