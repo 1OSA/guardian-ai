@@ -2655,6 +2655,11 @@ func (s *GuardianServer) registerBlocklistHandlers(dev bool) {
 	}))
 	http.HandleFunc("/api/blocklist/load", s.withAuth(dev, http.MethodPost, s.handleBlocklistLoad))
 	http.HandleFunc("/api/blocklist/sources", s.withAuthAny(dev, s.handleBlocklistSources))
+	http.HandleFunc("/api/blocklist/sources/reload", s.withAuth(dev, http.MethodPost, func(w http.ResponseWriter, r *http.Request, _ string) {
+		go s.reloadAllSources()
+		s.log(LogLevelInfo, "blocklist", map[string]any{"action": "sources_reload"})
+		jsonOK(w, map[string]any{"ok": true})
+	}))
 	http.HandleFunc("/api/blocklist/reload", s.withAuth(dev, http.MethodPost, func(w http.ResponseWriter, r *http.Request, _ string) {
 		go s.reloadAllSources()
 		s.log(LogLevelInfo, "blocklist", map[string]any{"action": "manual_reload"})
@@ -2767,6 +2772,26 @@ func (s *GuardianServer) handleBlocklistSources(w http.ResponseWriter, r *http.R
 			}
 		}
 		jsonOK(w, out)
+	case http.MethodPost:
+		var sources []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&sources); err != nil {
+			jsonErr(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		s.dbMu.Lock()
+		_, _ = s.db.Exec("DELETE FROM blocklist_sources")
+		for _, src := range sources {
+			name := src.Name
+			if name == "" {
+				name = src.URL
+			}
+			_, _ = s.db.Exec("INSERT INTO blocklist_sources (name, url) VALUES (?, ?)", name, src.URL)
+		}
+		s.dbMu.Unlock()
+		jsonOK(w, map[string]any{"ok": true})
 	case http.MethodDelete:
 		var body struct {
 			URL string `json:"url"`
