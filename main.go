@@ -2162,6 +2162,8 @@ func (s *GuardianServer) registerAuthHandlers(dev bool) {
 
 	http.HandleFunc("/api/current-ip", withNoAuth(dev, http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		ip := "127.0.0.1"
+
+		// Method 1: enumerate network interfaces (works on most desktop OSes).
 		if addrs, err := net.InterfaceAddrs(); err == nil {
 			for _, addr := range addrs {
 				if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
@@ -2170,6 +2172,20 @@ func (s *GuardianServer) registerAuthHandlers(dev bool) {
 				}
 			}
 		}
+
+		// Method 2: if we still have loopback, try an outbound UDP dial.
+		// This doesn't send any traffic — it just lets the OS pick the
+		// correct source IP for the default route.  Works on Termux/Android
+		// where InterfaceAddrs often only returns loopback.
+		if ip == "127.0.0.1" {
+			if conn, err := net.Dial("udp4", "8.8.8.8:53"); err == nil {
+				if local, ok := conn.LocalAddr().(*net.UDPAddr); ok && !local.IP.IsLoopback() {
+					ip = local.IP.String()
+				}
+				conn.Close()
+			}
+		}
+
 		jsonOK(w, map[string]any{"ip": ip})
 	}))
 }
