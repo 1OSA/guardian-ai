@@ -1,12 +1,10 @@
 import json
 import os
-import pickle
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.utils import class_weight
 from tensorflow.keras.layers import (
     LSTM,
     Bidirectional,
@@ -14,7 +12,6 @@ from tensorflow.keras.layers import (
     Dense,
     Dropout,
     Embedding,
-    Flatten,
     MaxPooling1D,
 )
 from tensorflow.keras.models import Sequential
@@ -98,10 +95,7 @@ def train():
     tokenizer = Tokenizer(char_level=True, lower=True, filters="", oov_token="<UNK>")
     tokenizer.fit_on_texts(X_raw)
 
-    with open("tokenizer.pickle", "wb") as f:
-        pickle.dump(tokenizer, f)
-
-    # Also export a framework-free JSON tokenizer for Keras-free inference.
+    # Export a framework-free JSON tokenizer for Keras-free inference.
     tok_data = {
         "word_index": tokenizer.word_index,
         "oov_token": tokenizer.oov_token,
@@ -124,10 +118,6 @@ def train():
 
     # --- STEP 3: CALCULATE CLASS WEIGHTS ---
     # This fixes the "Coin Flip" issue. We tell the model that Class 2 (Phishing) is rare and important.
-    y_integers = np.argmax(y_train, axis=1)
-    class_weights = class_weight.compute_class_weight(
-        class_weight="balanced", classes=np.unique(y_integers), y=y_integers
-    )
     # MANUALLY boost Class 2 (Phishing) importance by 5x
     weights_dict = {0: 1.0, 1: 1.0, 2: 5.0}
     print(f"Class Weights applied: {weights_dict}")

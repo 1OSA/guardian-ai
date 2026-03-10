@@ -1,4 +1,16 @@
+"""
+Convert a trained Keras (.h5) model to ONNX format.
+
+This is a dev-only tool — it requires tensorflow and tf2onnx, which are NOT
+needed at inference time.  The resulting .onnx file is what gets embedded into
+the Guardian AI binary.
+
+Usage:
+    python convert_to_onnx.py
+"""
+
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -11,19 +23,20 @@ except ImportError:
     print("Install it with: pip install tensorflow")
     sys.exit(1)
 
-try:
-    import tf2onnx
-except ImportError:
-    print("Error: tf2onnx is required to convert the model.")
-    print("Install it with: pip install tf2onnx")
-    sys.exit(1)
-
 H5_PATH = "guardian_model.h5"
 ONNX_PATH = "guardian_model.onnx"
 MAX_LEN = 75
 
 
 def convert():
+    # Verify tf2onnx is available before doing any heavy work.
+    try:
+        import tf2onnx  # noqa: F401
+    except ImportError:
+        print("Error: tf2onnx is required to convert the model.")
+        print("Install it with: pip install tf2onnx")
+        sys.exit(1)
+
     print(f"Loading Keras model from {H5_PATH} ...")
     model = tf.keras.models.load_model(H5_PATH)
     model.summary()
@@ -34,8 +47,6 @@ def convert():
     model.export(saved_model_dir)
 
     print("Converting SavedModel to ONNX ...")
-    import subprocess
-
     result = subprocess.run(
         [
             sys.executable,

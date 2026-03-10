@@ -299,7 +299,7 @@ def generate_attacks(domain_list, num_needed):
             final_domain = "".join(new_name) + "." + tld
             if final_domain != target:
                 attacks.add(final_domain)
-        except:
+        except Exception:
             continue
     return list(attacks)
 

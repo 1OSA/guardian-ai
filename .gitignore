@@ -16,14 +16,14 @@ env/
 *.tflite
 *.onnx
 
-# Keep trained model and tokenizer (needed for embedding into the binary)
-!ml-service/guardian_model.h5
+# Keep trained ONNX model and tokenizer (needed for embedding into the binary)
 !ml-service/guardian_model.onnx
-!ml-service/tokenizer.pickle
+!ml-service/tokenizer.json
 
 # --- Go ---
 # Binaries
 *.exe
+*.exe~
 *.test
 *.prof
 
