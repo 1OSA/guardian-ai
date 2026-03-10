@@ -46,7 +46,7 @@ var AppVersion = "dev"
 //go:embed frontend/dist**
 var embeddedDist embed.FS
 
-//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt
+//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.h5 ml-service/tokenizer.pickle
 var embeddedML embed.FS
 
 // ── Constants ─────────────────────────────────────────────────────────────────
