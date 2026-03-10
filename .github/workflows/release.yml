@@ -26,6 +26,10 @@ jobs:
             goarch: arm64
             ext: ""
             name: guardian-ai-linux-arm64
+          - goos: android
+            goarch: arm64
+            ext: ""
+            name: guardian-ai-termux-arm64
 
     steps:
       - uses: actions/checkout@v4
