@@ -46,7 +46,7 @@ var AppVersion = "dev"
 //go:embed frontend/dist**
 var embeddedDist embed.FS
 
-//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.onnx ml-service/tokenizer.pickle
+//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.onnx ml-service/tokenizer.json
 var embeddedML embed.FS
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -3752,7 +3752,7 @@ func main() {
 	// (if they were included in the go:embed directive). If not, try to copy
 	// them from common disk locations next to the executable.
 	exeDir := filepath.Dir(func() string { p, _ := os.Executable(); return p }())
-	for _, modelFile := range []string{"tokenizer.pickle"} {
+	for _, modelFile := range []string{"tokenizer.json"} {
 		dest := filepath.Join(td, modelFile)
 		if _, err := os.Stat(dest); err == nil {
 			log.Printf("[ml] %s found (embedded)", modelFile)

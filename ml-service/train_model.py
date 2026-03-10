@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 
@@ -99,6 +100,18 @@ def train():
 
     with open("tokenizer.pickle", "wb") as f:
         pickle.dump(tokenizer, f)
+
+    # Also export a framework-free JSON tokenizer for Keras-free inference.
+    tok_data = {
+        "word_index": tokenizer.word_index,
+        "oov_token": tokenizer.oov_token,
+        "oov_index": tokenizer.word_index.get(tokenizer.oov_token, 0),
+        "lower": tokenizer.lower,
+        "char_level": tokenizer.char_level,
+    }
+    with open("tokenizer.json", "w", encoding="utf-8") as f:
+        json.dump(tok_data, f, ensure_ascii=False, indent=2)
+    print(f"[+] Saved tokenizer.json ({len(tokenizer.word_index)} tokens)")
 
     vocab_size = len(tokenizer.word_index) + 1
     sequences = tokenizer.texts_to_sequences(X_raw)
