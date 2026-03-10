@@ -18,6 +18,7 @@ env/
 
 # Keep trained model and tokenizer (needed for embedding into the binary)
 !ml-service/guardian_model.h5
+!ml-service/guardian_model.onnx
 !ml-service/tokenizer.pickle
 
 # --- Go ---

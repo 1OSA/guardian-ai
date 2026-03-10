@@ -46,7 +46,7 @@ var AppVersion = "dev"
 //go:embed frontend/dist**
 var embeddedDist embed.FS
 
-//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.h5 ml-service/tokenizer.pickle
+//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.onnx ml-service/guardian_model.h5 ml-service/tokenizer.pickle
 var embeddedML embed.FS
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -3622,7 +3622,7 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 	// Only install Python dependencies if a key module is missing.
 	reqPath := filepath.Join(mlDir, "requirements.txt")
 	if _, err := os.Stat(reqPath); err == nil {
-		check := exec.Command(python, "-c", "import grpc, numpy, tensorflow")
+		check := exec.Command(python, "-c", "import grpc, numpy, onnxruntime")
 		check.Dir = mlDir
 		if err := check.Run(); err != nil {
 			log.Printf("[ml] missing Python dependencies, installing ...")
