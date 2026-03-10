@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+    --color-accent: #798777;
+    --color-accent-dim: #1a211a;
+    --color-surface: #131313;
+    --color-surface-1: #1a1a1a;
+    --color-surface-2: #111;
+    --color-surface-3: #0f0f0f;
+    --color-border: #222;
+    --color-border-dim: #1e1e1e;
+    --color-border-mid: #2a2a2a;
+    --color-text: #e0e0e0;
+    --color-text-dim: #ccc;
+    --color-text-muted: #888;
+    --color-text-faint: #666;
+    --color-text-ghost: #555;
+    --color-text-dead: #444;
+    --color-danger: #c0392b;
+    --color-danger-dim: #2a1414;
+    --color-danger-border: #7a3333;
+    --color-warn: #e67e22;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        Roboto,
+        Arial;
+    margin: 0;
+    padding: 0;
+    background: #131313;
+    color: #e0e0e0;
+}
+
+@keyframes guardian-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Tailwind doesn't know about our custom spin animation, define a utility */
+@utility spin-slow {
+    animation: guardian-spin 0.8s linear infinite;
+}

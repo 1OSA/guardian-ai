@@ -24,14 +24,14 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0eguardian.proto\x12\x08guardian\"\x1f\n\rDomainRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\"V\n\x12PredictionResponse\x12\x14\n\x0cis_malicious\x18\x01 \x01(\x08\x12\x18\n\x10\x63onfidence_score\x18\x02 \x01(\x02\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\t2V\n\nGuardianAI\x12H\n\rPredictDomain\x12\x17.guardian.DomainRequest\x1a\x1c.guardian.PredictionResponse\"\x00\x42+Z)github.com/yourusername/guardian-ai/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0eguardian.proto\x12\x08guardian\"\x1f\n\rDomainRequest\x12\x0e\n\x06\x64omain\x18\x01 \x01(\t\"V\n\x12PredictionResponse\x12\x14\n\x0cis_malicious\x18\x01 \x01(\x08\x12\x18\n\x10\x63onfidence_score\x18\x02 \x01(\x02\x12\x10\n\x08\x63\x61tegory\x18\x03 \x01(\t2V\n\nGuardianAI\x12H\n\rPredictDomain\x12\x17.guardian.DomainRequest\x1a\x1c.guardian.PredictionResponse\"\x00\x42#Z!github.com/1OSA/guardian-ai/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'guardian_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'Z)github.com/yourusername/guardian-ai/proto'
+  _globals['DESCRIPTOR']._serialized_options = b'Z!github.com/1OSA/guardian-ai/proto'
   _globals['_DOMAINREQUEST']._serialized_start=28
   _globals['_DOMAINREQUEST']._serialized_end=59
   _globals['_PREDICTIONRESPONSE']._serialized_start=61

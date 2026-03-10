@@ -29,3 +29,18 @@ vendor/
 .vscode/
 .idea/
 *.swp
+
+# --- Go Workspace (not needed; replace directive in go.mod handles proto) ---
+go.work
+go.work.sum
+
+# --- Logs and Misc ---
+logs/
+*.log
+*.tmp
+*.db
+*.db-shm
+*.db-wal
+
+# --- Runtime-generated ---
+blocklists/
