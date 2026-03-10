@@ -3618,6 +3618,20 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 			return nil, fmt.Errorf("python executable not found in PATH")
 		}
 	}
+
+	// Auto-install Python dependencies if requirements.txt exists.
+	reqPath := filepath.Join(mlDir, "requirements.txt")
+	if _, err := os.Stat(reqPath); err == nil {
+		log.Printf("[ml] installing Python dependencies from requirements.txt ...")
+		pip := exec.Command(python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", reqPath)
+		pip.Dir = mlDir
+		pip.Stdout = os.Stdout
+		pip.Stderr = os.Stderr
+		if err := pip.Run(); err != nil {
+			log.Printf("[ml] warning: pip install failed: %v (ML service may not start)", err)
+		}
+	}
+
 	cmd := exec.Command(python, "guardian_grpc.py")
 	cmd.Dir = mlDir
 	cmd.Env = append(os.Environ(),
