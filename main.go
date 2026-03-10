@@ -540,6 +540,41 @@ type GuardianServer struct {
 	rateLimitMu sync.Mutex
 }
 
+// httpClient returns an *http.Client whose DNS resolution goes through the
+// server's configured upstream resolvers instead of the OS default.
+// This is critical on Termux / Android where the system resolver often
+// points at 127.0.0.1:53 or [::1]:53 which may not be running.
+func (s *GuardianServer) httpClient(timeout time.Duration) *http.Client {
+	s.upstreamMu.RLock()
+	upstreams := make([]string, len(s.upstreams))
+	copy(upstreams, s.upstreams)
+	s.upstreamMu.RUnlock()
+
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			// Round-robin through configured upstreams.
+			for _, us := range upstreams {
+				conn, err := dialer.DialContext(ctx, "udp", us)
+				if err == nil {
+					return conn, nil
+				}
+			}
+			// All upstreams failed — fall back to the original address (OS default).
+			return dialer.DialContext(ctx, network, address)
+		},
+	}
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:  10 * time.Second,
+			Resolver: resolver,
+		}).DialContext,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	return &http.Client{Timeout: timeout, Transport: transport}
+}
+
 type mlCacheEntry struct {
 	isMalicious bool
 	category    string
@@ -1365,7 +1400,7 @@ func (s *GuardianServer) reloadAllSources() {
 		err     error
 	}
 	results := make(chan fetchResult, len(urls))
-	httpClient := &http.Client{Timeout: 60 * time.Second}
+	httpClient := s.httpClient(60 * time.Second)
 	for _, u := range urls {
 		u := u
 		go func() {
