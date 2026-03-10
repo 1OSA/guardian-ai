@@ -3619,16 +3619,22 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 		}
 	}
 
-	// Auto-install Python dependencies if requirements.txt exists.
+	// Only install Python dependencies if a key module is missing.
 	reqPath := filepath.Join(mlDir, "requirements.txt")
 	if _, err := os.Stat(reqPath); err == nil {
-		log.Printf("[ml] installing Python dependencies from requirements.txt ...")
-		pip := exec.Command(python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", reqPath)
-		pip.Dir = mlDir
-		pip.Stdout = os.Stdout
-		pip.Stderr = os.Stderr
-		if err := pip.Run(); err != nil {
-			log.Printf("[ml] warning: pip install failed: %v (ML service may not start)", err)
+		check := exec.Command(python, "-c", "import grpc, numpy, tensorflow")
+		check.Dir = mlDir
+		if err := check.Run(); err != nil {
+			log.Printf("[ml] missing Python dependencies, installing ...")
+			pip := exec.Command(python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", reqPath)
+			pip.Dir = mlDir
+			pip.Stdout = os.Stdout
+			pip.Stderr = os.Stderr
+			if err := pip.Run(); err != nil {
+				log.Printf("[ml] warning: pip install failed: %v (ML service may not start)", err)
+			}
+		} else {
+			log.Printf("[ml] Python dependencies already installed, skipping pip install")
 		}
 	}
 
