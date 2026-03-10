@@ -46,7 +46,7 @@ var AppVersion = "dev"
 //go:embed frontend/dist**
 var embeddedDist embed.FS
 
-//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.onnx ml-service/guardian_model.h5 ml-service/tokenizer.pickle
+//go:embed ml-service/guardian_grpc.py ml-service/guardian_pb2.py ml-service/guardian_pb2_grpc.py ml-service/requirements.txt ml-service/guardian_model.onnx ml-service/tokenizer.pickle
 var embeddedML embed.FS
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2236,6 +2236,7 @@ func (s *GuardianServer) registerQueryHandlers(dev bool) {
 	http.HandleFunc("/api/queries/block", s.withAuth(dev, http.MethodPost, s.handleQuickBlock))
 	http.HandleFunc("/api/queries/retention", s.withAuthAny(dev, s.handleQueryRetention))
 	http.HandleFunc("/api/dns/test", s.withAuth(dev, http.MethodGet, s.handleDNSTest))
+	http.HandleFunc("/api/test-domain", s.withAuth(dev, http.MethodGet, s.handleDNSTest))
 	http.HandleFunc("/queries/export", s.withAuth(dev, http.MethodGet, s.handleQueryExport))
 }
 
@@ -2438,6 +2439,9 @@ func (s *GuardianServer) handleDNSTest(w http.ResponseWriter, r *http.Request, _
 		return
 	}
 	clientIP := strings.TrimSpace(r.URL.Query().Get("client"))
+	if clientIP == "" {
+		clientIP = strings.TrimSpace(r.URL.Query().Get("client_ip"))
+	}
 
 	type testResult struct {
 		Domain     string   `json:"domain"`
@@ -3569,45 +3573,17 @@ func writeEmbeddedDir(efs embed.FS, src, dest string) error {
 
 // ── Python ML subprocess ──────────────────────────────────────────────────────
 
-var noisyPrefixes = []string{
-	"I tensorflow/",
-	"W tensorflow/",
-	"WARNING:absl:",
-	"WARNING:tensorflow:",
-	"I external/",
-	"W external/",
-}
-
-func isTFNoise(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	for _, p := range noisyPrefixes {
-		if strings.Contains(trimmed, p) {
-			return true
-		}
+func isTermux() bool {
+	// Termux sets PREFIX to /data/data/com.termux/files/usr (or similar).
+	prefix := os.Getenv("PREFIX")
+	if strings.Contains(prefix, "com.termux") {
+		return true
+	}
+	// Fallback: check if the Termux files directory exists.
+	if _, err := os.Stat("/data/data/com.termux"); err == nil {
+		return true
 	}
 	return false
-}
-
-// filteredWriter forwards lines to dst, dropping known TF/absl noise.
-type filteredWriter struct {
-	dst io.Writer
-	buf string
-}
-
-func (fw *filteredWriter) Write(p []byte) (int, error) {
-	fw.buf += string(p)
-	for {
-		idx := strings.IndexByte(fw.buf, '\n')
-		if idx < 0 {
-			break
-		}
-		line := fw.buf[:idx+1]
-		fw.buf = fw.buf[idx+1:]
-		if !isTFNoise(line) {
-			_, _ = fw.dst.Write([]byte(line))
-		}
-	}
-	return len(p), nil
 }
 
 func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
@@ -3619,6 +3595,11 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 		}
 	}
 
+	termux := isTermux()
+	if termux {
+		log.Printf("[ml] Termux environment detected")
+	}
+
 	// Only install Python dependencies if a key module is missing.
 	reqPath := filepath.Join(mlDir, "requirements.txt")
 	if _, err := os.Stat(reqPath); err == nil {
@@ -3626,12 +3607,48 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 		check.Dir = mlDir
 		if err := check.Run(); err != nil {
 			log.Printf("[ml] missing Python dependencies, installing ...")
-			pip := exec.Command(python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", reqPath)
-			pip.Dir = mlDir
-			pip.Stdout = os.Stdout
-			pip.Stderr = os.Stderr
-			if err := pip.Run(); err != nil {
-				log.Printf("[ml] warning: pip install failed: %v (ML service may not start)", err)
+
+			if termux {
+				// On Termux, grpcio and onnxruntime often lack prebuilt wheels.
+				// Try the Termux system package manager first for native packages,
+				// then fall back to pip with --break-system-packages for the rest.
+				log.Printf("[ml] attempting Termux pkg install for native packages ...")
+				for _, pkg := range []string{"python-numpy", "python-grpcio", "python-onnxruntime"} {
+					pkgCmd := exec.Command("pkg", "install", "-y", pkg)
+					pkgCmd.Dir = mlDir
+					pkgCmd.Stdout = os.Stdout
+					pkgCmd.Stderr = os.Stderr
+					if err := pkgCmd.Run(); err != nil {
+						log.Printf("[ml] pkg install %s not available, will try pip", pkg)
+					}
+				}
+				// Re-check after pkg install; only pip-install what's still missing.
+				recheck := exec.Command(python, "-c", "import grpc, numpy, onnxruntime")
+				recheck.Dir = mlDir
+				if err := recheck.Run(); err != nil {
+					log.Printf("[ml] still missing deps after pkg, falling back to pip ...")
+					pip := exec.Command(python, "-m", "pip", "install",
+						"--quiet", "--disable-pip-version-check",
+						"--break-system-packages",
+						"-r", reqPath)
+					pip.Dir = mlDir
+					pip.Stdout = os.Stdout
+					pip.Stderr = os.Stderr
+					if err := pip.Run(); err != nil {
+						log.Printf("[ml] warning: pip install failed: %v", err)
+						log.Printf("[ml] On Termux, install dependencies manually:")
+						log.Printf("[ml]   pkg install python-numpy python-grpcio python-onnxruntime")
+						log.Printf("[ml]   pip install typing_extensions")
+					}
+				}
+			} else {
+				pip := exec.Command(python, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", reqPath)
+				pip.Dir = mlDir
+				pip.Stdout = os.Stdout
+				pip.Stderr = os.Stderr
+				if err := pip.Run(); err != nil {
+					log.Printf("[ml] warning: pip install failed: %v (ML service may not start)", err)
+				}
 			}
 		} else {
 			log.Printf("[ml] Python dependencies already installed, skipping pip install")
@@ -3641,15 +3658,12 @@ func startEmbeddedPython(mlDir string) (*exec.Cmd, error) {
 	cmd := exec.Command(python, "guardian_grpc.py")
 	cmd.Dir = mlDir
 	cmd.Env = append(os.Environ(),
-		"TF_CPP_MIN_LOG_LEVEL=3",
-		"TF_ENABLE_ONEDNN_OPTS=0",
 		"PYTHONWARNINGS=ignore",
-		"ABSL_MIN_LOG_LEVEL=3",
 		"GRPC_VERBOSITY=ERROR",
 	)
 	var bufOut, bufErr bytes.Buffer
-	cmd.Stdout = io.MultiWriter(&filteredWriter{dst: os.Stdout}, &bufOut)
-	cmd.Stderr = io.MultiWriter(&filteredWriter{dst: os.Stderr}, &bufErr)
+	cmd.Stdout = io.MultiWriter(os.Stdout, &bufOut)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &bufErr)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -3704,6 +3718,12 @@ func main() {
 		*logLevelStr = "info"
 	}
 
+	if isTermux() && *listen == ":53" {
+		log.Printf("[guardian] WARNING: Termux detected — port 53 requires root.")
+		log.Printf("[guardian] If bind fails, restart with: --listen :5353")
+		log.Printf("[guardian] Then point your device DNS to <this-ip>:5353")
+	}
+
 	var logLevel LogLevel
 	switch strings.ToLower(*logLevelStr) {
 	case "error":
@@ -3732,7 +3752,7 @@ func main() {
 	// (if they were included in the go:embed directive). If not, try to copy
 	// them from common disk locations next to the executable.
 	exeDir := filepath.Dir(func() string { p, _ := os.Executable(); return p }())
-	for _, modelFile := range []string{"guardian_model.h5", "tokenizer.pickle"} {
+	for _, modelFile := range []string{"tokenizer.pickle"} {
 		dest := filepath.Join(td, modelFile)
 		if _, err := os.Stat(dest); err == nil {
 			log.Printf("[ml] %s found (embedded)", modelFile)

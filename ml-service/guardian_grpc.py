@@ -1,5 +1,4 @@
 import pickle
-import time
 from concurrent import futures
 
 import grpc
@@ -13,7 +12,6 @@ import onnxruntime as ort
 # --- CONFIG ---
 MAX_LEN = 75
 ONNX_MODEL_PATH = "guardian_model.onnx"
-H5_MODEL_PATH = "guardian_model.h5"
 TOKENIZER_PATH = "tokenizer.pickle"
 
 
@@ -21,51 +19,34 @@ class GuardianService(guardian_pb2_grpc.GuardianAIServicer):
     def __init__(self):
         import os
 
-        # Prefer ONNX model, fall back to H5 if not found.
-        if os.path.exists(ONNX_MODEL_PATH):
-            print(f"[*] Loading ONNX model from {ONNX_MODEL_PATH} ...")
-            opts = ort.SessionOptions()
-            opts.inter_op_num_threads = 2
-            opts.intra_op_num_threads = 2
-            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            self.session = ort.InferenceSession(
-                ONNX_MODEL_PATH, sess_options=opts, providers=["CPUExecutionProvider"]
-            )
-            self.input_name = self.session.get_inputs()[0].name
-            self.backend = "onnx"
-        elif os.path.exists(H5_MODEL_PATH):
-            print(
-                f"[*] ONNX model not found, falling back to TensorFlow ({H5_MODEL_PATH}) ..."
-            )
-            import tensorflow as tf
-
-            tf.get_logger().setLevel("ERROR")
-            self.tf_model = tf.keras.models.load_model(H5_MODEL_PATH)
-            self.pad_sequences = tf.keras.preprocessing.sequence.pad_sequences
-            self.backend = "tensorflow"
-        else:
+        if not os.path.exists(ONNX_MODEL_PATH):
             raise FileNotFoundError(
-                f"No model file found. Expected {ONNX_MODEL_PATH} or {H5_MODEL_PATH}"
+                f"ONNX model not found at {ONNX_MODEL_PATH}. "
+                "Train the model first (train_model.py) then convert it (convert_to_tflite.py)."
             )
+
+        print(f"[*] Loading ONNX model from {ONNX_MODEL_PATH} ...")
+        opts = ort.SessionOptions()
+        opts.inter_op_num_threads = 2
+        opts.intra_op_num_threads = 2
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.session = ort.InferenceSession(
+            ONNX_MODEL_PATH, sess_options=opts, providers=["CPUExecutionProvider"]
+        )
+        self.input_name = self.session.get_inputs()[0].name
 
         print("[*] Loading Tokenizer ...")
         with open(TOKENIZER_PATH, "rb") as f:
             self.tokenizer = pickle.load(f)
-        print(f"[+] AI Ready to serve (backend: {self.backend}).")
+        print("[+] AI Ready to serve (backend: onnxruntime).")
 
     def _predict(self, domain):
         seq = self.tokenizer.texts_to_sequences([domain])
-
-        if self.backend == "onnx":
-            padded = np.zeros((1, MAX_LEN), dtype=np.float32)
-            for i, idx in enumerate(seq[0][:MAX_LEN]):
-                padded[0][i] = float(idx)
-            outputs = self.session.run(None, {self.input_name: padded})
-            return outputs[0][0]
-        else:
-            padded = self.pad_sequences(seq, maxlen=MAX_LEN, padding="post")
-            prediction = self.tf_model.predict(padded, verbose=0)
-            return prediction[0]
+        padded = np.zeros((1, MAX_LEN), dtype=np.float32)
+        for i, idx in enumerate(seq[0][:MAX_LEN]):
+            padded[0][i] = float(idx)
+        outputs = self.session.run(None, {self.input_name: padded})
+        return outputs[0][0]
 
     def PredictDomain(self, request, context):
         domain = request.domain.lower().strip()
