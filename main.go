@@ -3708,9 +3708,16 @@ func main() {
 	}
 	log.Printf("[ml] extracted embedded ML service to %s", td)
 
-	// Copy model/tokenizer from disk into the temp dir.
+	// The model/tokenizer may already have been extracted by writeEmbeddedDir
+	// (if they were included in the go:embed directive). If not, try to copy
+	// them from common disk locations next to the executable.
 	exeDir := filepath.Dir(func() string { p, _ := os.Executable(); return p }())
 	for _, modelFile := range []string{"guardian_model.h5", "tokenizer.pickle"} {
+		dest := filepath.Join(td, modelFile)
+		if _, err := os.Stat(dest); err == nil {
+			log.Printf("[ml] %s found (embedded)", modelFile)
+			continue
+		}
 		candidates := []string{
 			filepath.Join(exeDir, modelFile),
 			filepath.Join(exeDir, "ml-service", modelFile),
@@ -3723,7 +3730,7 @@ func main() {
 			if err != nil {
 				continue
 			}
-			if err := os.WriteFile(filepath.Join(td, modelFile), data, 0o644); err != nil {
+			if err := os.WriteFile(dest, data, 0o644); err != nil {
 				log.Printf("[ml] warning: found %s at %s but could not copy: %v", modelFile, src, err)
 			} else {
 				log.Printf("[ml] copied %s from %s", modelFile, src)
