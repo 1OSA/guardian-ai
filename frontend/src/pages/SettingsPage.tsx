@@ -498,7 +498,7 @@ const SettingsPage: React.FC = () => {
                 <textarea
                   value={upstream}
                   onChange={(e) => handleUpstreamChange(e.target.value)}
-                  placeholder={"8.8.8.8:53\n1.1.1.1:53\n208.67.222.222:53"}
+                  placeholder={"8.8.8.8\n1.1.1.1\n208.67.222.222"}
                   rows={4}
                   className={textareaCls}
                 />
@@ -508,9 +508,8 @@ const SettingsPage: React.FC = () => {
                       key={r}
                       type="button"
                       onClick={() => {
-                        const line = r.includes(":") ? r : `${r}:53`;
                         handleUpstreamChange(
-                          upstream + (upstream.trim() ? "\n" : "") + line,
+                          upstream + (upstream.trim() ? "\n" : "") + r,
                         );
                       }}
                       className="px-2 py-0.75 bg-border-dim text-[#bbb] border border-[#333] rounded cursor-pointer text-[11px] font-mono"

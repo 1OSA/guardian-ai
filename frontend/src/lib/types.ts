@@ -18,6 +18,20 @@ export type QueryRow = {
   reason?: string;
 };
 
+export type RuleScopeType = "global" | "group" | "client";
+
+export type RuleRow = {
+  id: number;
+  scope_type: RuleScopeType;
+  scope_key: string;
+  label: string;
+  blocked: boolean;
+  rules: string;
+  created_at: string;
+  updated_at?: string;
+  display_name?: string;
+};
+
 export type GroupMember = {
   id: number;
   identifier: string;
@@ -29,9 +43,21 @@ export type ClientGroup = {
   name: string;
   label: string;
   blocked: boolean;
-  rules: string;
   created_at: string;
   members: GroupMember[];
+  rule_count?: number;
+};
+
+export type ClientRecord = {
+  id: number;
+  scope_type: RuleScopeType;
+  scope_key: string;
+  client_ip: string;
+  label: string;
+  blocked: boolean;
+  rules: string;
+  created_at: string;
+  display_name?: string;
 };
 
 export type ServiceDef = {

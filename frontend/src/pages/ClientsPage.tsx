@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { FaUsers, FaNetworkWired, FaPlus } from "react-icons/fa";
@@ -12,6 +12,8 @@ import type {
   ServiceSchedule,
   ServiceScheduleMap,
 } from "../lib/types";
+
+type UnifiedRuleScope = "global" | "group" | "client";
 
 const ClientsPage: React.FC = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -56,76 +58,73 @@ const ClientsPage: React.FC = () => {
   const [svcSaving, setSvcSaving] = useState<string | null>(null);
   const [svcLoading, setSvcLoading] = useState(false);
 
-  // ── deep-link: ?edit=<ip>[&tab=services] ─────────────────────────────────
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const editIp = params.get("edit");
-    if (!editIp) return;
-    const tab = params.get("tab") === "services" ? "services" : "rules";
-    navigate("/clients", { replace: true });
-    fetchGroups().then(async (loaded) => {
-      const g = loaded.find((gr) =>
-        gr.members.some((m) => m.identifier === editIp),
+  const fetchGroupSvcSchedules = useCallback(async (groupId: number) => {
+    const key = `group:${groupId}`;
+    setSvcLoading(true);
+    try {
+      const res = await axios.get(
+        `/api/services?scope=group&key=${encodeURIComponent(key)}&merged=1`,
       );
-      if (g) {
-        startEditGroup(g, tab);
-      } else {
-        try {
-          const res = await axios.post("/api/groups", {
-            name: editIp,
-            label: "",
-            blocked: false,
-            rules: "",
-          });
-          const newId = (res.data as { id: number }).id;
-          const mType =
-            editIp.includes(":") && editIp.length === 17 ? "mac" : "ip";
-          await axios.post("/api/groups/members", {
-            group_id: newId,
-            identifier: editIp,
-            type: mType,
-          });
-          const refreshed = await fetchGroups();
-          const created = refreshed.find((gr) => gr.id === newId);
-          if (created) startEditGroup(created, tab);
-        } catch {
-          setFormName(editIp);
-          setFormMembers(editIp);
-          setFormLabel("");
-          setFormRules("");
-          setFormBlocked(false);
-          setShowAdd(true);
-        }
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search]);
-
-  useEffect(() => {
-    fetchGroups();
-    fetchSvcDefs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      setGroupSvcSchedules((prev) => ({
+        ...prev,
+        [key]: res.data as ServiceScheduleMap,
+      }));
+    } catch {
+      /* ignore */
+    } finally {
+      setSvcLoading(false);
+    }
   }, []);
 
-  useEffect(
-    () => () => {
-      if (editSaveTimerRef.current) clearTimeout(editSaveTimerRef.current);
+  const upsertRules = useCallback(
+    async (
+      scopeType: UnifiedRuleScope,
+      scopeKey: string,
+      label: string,
+      blocked: boolean,
+      rules: string,
+    ) => {
+      await axios.post("/api/rules", {
+        scope_type: scopeType,
+        scope_key: scopeKey,
+        label,
+        blocked,
+        rules,
+      });
     },
     [],
   );
 
-  // ── data fetchers ─────────────────────────────────────────────────────────
+  const loadRules = useCallback(
+    async (scopeType: UnifiedRuleScope, scopeKey: string) => {
+      try {
+        const res = await axios.get(
+          `/api/rules?scope=${scopeType}&key=${encodeURIComponent(scopeKey)}`,
+        );
+        return res.data.rules || "";
+      } catch {
+        return "";
+      }
+    },
+    [],
+  );
 
-  const fetchSvcDefs = async () => {
-    try {
-      const res = await axios.get("/api/services/definitions");
-      setSvcDefs(res.data as ServiceDef[]);
-    } catch {
-      /* ignore */
-    }
-  };
+  const startEditGroup = useCallback(
+    async (g: ClientGroup, initialTab: "rules" | "services" = "rules") => {
+      setEditingId(g.id);
+      setEditName(g.name);
+      setEditLabel(g.label);
+      setEditBlocked(g.blocked);
+      const rules = await loadRules("group", g.id.toString());
+      setEditRules(rules);
+      setEditTab(initialTab);
+      setEditSaveStatus("idle");
+      fetchGroupSvcSchedules(g.id);
+    },
+    [loadRules, fetchGroupSvcSchedules],
+  );
 
-  const fetchGroups = async (): Promise<ClientGroup[]> => {
+  const fetchGroups = useCallback(async (): Promise<ClientGroup[]> => {
     setLoading(true);
     try {
       const res = await axios.get("/api/groups");
@@ -137,7 +136,70 @@ const ClientsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchSvcDefs = useCallback(async () => {
+    try {
+      const res = await axios.get("/api/services/definitions");
+      setSvcDefs(res.data as ServiceDef[]);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // ── deep-link: ?edit=<ip>[&tab=services] ─────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const editIp = params.get("edit");
+    if (!editIp) return;
+    const tab = params.get("tab") === "services" ? "services" : "rules";
+    navigate("/clients", { replace: true });
+    fetchGroups().then(async (loaded) => {
+      const g = loaded.find((gr) =>
+        gr.members.some((m) => m.identifier === editIp),
+      );
+      if (g) await startEditGroup(g, tab);
+      else {
+        try {
+          const res = await axios.post("/api/groups", {
+            name: editIp,
+            label: "",
+            blocked: false,
+          });
+          const newId = (res.data as { id: number }).id;
+          const mType =
+            editIp.includes(":") && editIp.length === 17 ? "mac" : "ip";
+          await axios.post("/api/groups/members", {
+            group_id: newId,
+            identifier: editIp,
+            type: mType,
+          });
+          const refreshed = await fetchGroups();
+          const created = refreshed.find((gr) => gr.id === newId);
+          if (created) await startEditGroup(created, tab);
+        } catch {
+          setFormName(editIp);
+          setFormMembers(editIp);
+          setFormLabel("");
+          setFormRules("");
+          setFormBlocked(false);
+          setShowAdd(true);
+        }
+      }
+    });
+  }, [location.search, navigate, fetchGroups, startEditGroup]);
+
+  useEffect(() => {
+    fetchGroups();
+    fetchSvcDefs();
+  }, [fetchGroups, fetchSvcDefs]);
+
+  useEffect(
+    () => () => {
+      if (editSaveTimerRef.current) clearTimeout(editSaveTimerRef.current);
+    },
+    [],
+  );
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -163,7 +225,6 @@ const ClientsPage: React.FC = () => {
         name: formName.trim(),
         label: formLabel.trim(),
         blocked: formBlocked,
-        rules: formRules,
       });
       const newId = (res.data as { id: number }).id;
       for (const m of parseMembers(formMembers)) {
@@ -172,6 +233,15 @@ const ClientsPage: React.FC = () => {
           identifier: m.identifier,
           type: m.type,
         });
+      }
+      if (formRules.trim()) {
+        await upsertRules(
+          "group",
+          newId.toString(),
+          formLabel.trim(),
+          formBlocked,
+          formRules,
+        );
       }
       setFormName("");
       setFormLabel("");
@@ -195,18 +265,28 @@ const ClientsPage: React.FC = () => {
       name?: string;
       label?: string;
       blocked?: boolean;
-      rules?: string;
     },
   ) => {
     setEditSaveStatus("saving");
     try {
+      const nextName = fields?.name ?? editName;
+      const nextLabel = fields?.label ?? editLabel;
+      const nextBlocked = fields?.blocked ?? editBlocked;
       await axios.post("/api/groups", {
         id,
-        name: fields?.name ?? editName,
-        label: fields?.label ?? editLabel,
-        blocked: fields?.blocked ?? editBlocked,
-        rules: fields?.rules ?? editRules,
+        name: nextName,
+        label: nextLabel,
+        blocked: nextBlocked,
       });
+      if (editRules.trim()) {
+        await upsertRules(
+          "group",
+          id.toString(),
+          nextLabel,
+          nextBlocked,
+          editRules,
+        );
+      }
       await fetchGroups();
       setEditSaveStatus("saved");
       if (editSaveTimerRef.current) clearTimeout(editSaveTimerRef.current);
@@ -227,20 +307,6 @@ const ClientsPage: React.FC = () => {
     } catch {
       /* ignore */
     }
-  };
-
-  const startEditGroup = (
-    g: ClientGroup,
-    initialTab: "rules" | "services" = "rules",
-  ) => {
-    setEditingId(g.id);
-    setEditName(g.name);
-    setEditLabel(g.label);
-    setEditBlocked(g.blocked);
-    setEditRules(g.rules);
-    setEditTab(initialTab);
-    setEditSaveStatus("idle");
-    fetchGroupSvcSchedules(g.id);
   };
 
   const handleEditBlockedChange = (val: boolean, id: number) => {
@@ -276,30 +342,12 @@ const ClientsPage: React.FC = () => {
     }
   };
 
-  const fetchGroupSvcSchedules = async (groupId: number) => {
-    const key = `group:${groupId}`;
-    setSvcLoading(true);
-    try {
-      const res = await axios.get(
-        `/api/services?scope=client&key=${encodeURIComponent(key)}&merged=1`,
-      );
-      setGroupSvcSchedules((prev) => ({
-        ...prev,
-        [key]: res.data as ServiceScheduleMap,
-      }));
-    } catch {
-      /* ignore */
-    } finally {
-      setSvcLoading(false);
-    }
-  };
-
   const resetGroupSvcSchedule = async (groupId: number, svcId: string) => {
     const key = `group:${groupId}`;
     setSvcSaving(svcId);
     try {
       await axios.delete("/api/services", {
-        data: { scope: "client", scope_key: key, service_id: svcId },
+        data: { scope: "group", scope_key: key, service_id: svcId },
       });
       await fetchGroupSvcSchedules(groupId);
     } catch {
@@ -315,17 +363,20 @@ const ClientsPage: React.FC = () => {
     patch: Partial<ServiceSchedule>,
   ) => {
     const key = `group:${groupId}`;
-    const current: ServiceSchedule = groupSvcSchedules[key]?.[svcId] ?? {
-      enabled: false,
-      days_of_week: "",
-      time_start: "",
-      time_end: "",
-    };
-    const next: ServiceSchedule = { ...current, ...patch };
     setSvcSaving(svcId);
     try {
+      // Build the next row locally to post to the server.
+      const current: ServiceSchedule = groupSvcSchedules[key]?.[svcId] ?? {
+        enabled: false,
+        days_of_week: "",
+        time_start: "",
+        time_end: "",
+      };
+      const next: ServiceSchedule = { ...current, ...patch };
+
+      // Persist to the server.
       await axios.post("/api/services", {
-        scope: "client",
+        scope: "group",
         scope_key: key,
         service_id: svcId,
         enabled: next.enabled,
@@ -333,10 +384,9 @@ const ClientsPage: React.FC = () => {
         time_start: next.time_start,
         time_end: next.time_end,
       });
-      setGroupSvcSchedules((prev) => ({
-        ...prev,
-        [key]: { ...(prev[key] ?? {}), [svcId]: next },
-      }));
+
+      // After saving, refresh the schedules from the server (no optimistic update).
+      await fetchGroupSvcSchedules(groupId);
     } catch {
       /* ignore */
     } finally {

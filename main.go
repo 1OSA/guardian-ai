@@ -556,7 +556,11 @@ func (s *GuardianServer) httpClient(timeout time.Duration) *http.Client {
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			// Round-robin through configured upstreams.
 			for _, us := range upstreams {
-				conn, err := dialer.DialContext(ctx, "udp", us)
+				addr := us
+				if !strings.Contains(addr, ":") {
+					addr += ":53"
+				}
+				conn, err := dialer.DialContext(ctx, "udp", addr)
 				if err == nil {
 					return conn, nil
 				}
@@ -565,14 +569,12 @@ func (s *GuardianServer) httpClient(timeout time.Duration) *http.Client {
 			return dialer.DialContext(ctx, network, address)
 		},
 	}
-	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:  10 * time.Second,
-			Resolver: resolver,
-		}).DialContext,
-		TLSHandshakeTimeout: 10 * time.Second,
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			DialContext: resolver.Dial,
+		},
 	}
-	return &http.Client{Timeout: timeout, Transport: transport}
 }
 
 type mlCacheEntry struct {
@@ -834,7 +836,7 @@ func (s *GuardianServer) initDB() error {
 	);
 	CREATE TABLE IF NOT EXISTS sessions (
 		token      TEXT    PRIMARY KEY,
-		user_id    INTEGER,
+		user_id    INTEGER NOT NULL,
 		expires_at DATETIME
 	);
 	CREATE TABLE IF NOT EXISTS queries (
@@ -864,22 +866,22 @@ func (s *GuardianServer) initDB() error {
 		name TEXT    NOT NULL,
 		url  TEXT    NOT NULL UNIQUE
 	);
-	CREATE TABLE IF NOT EXISTS custom_rules (
-		id    INTEGER PRIMARY KEY AUTOINCREMENT,
-		rules TEXT    NOT NULL DEFAULT ''
+	CREATE TABLE IF NOT EXISTS rules (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		scope_type TEXT    NOT NULL CHECK(scope_type IN ('global','group','client')),
+		scope_key  TEXT    NOT NULL DEFAULT '',
+		label      TEXT    NOT NULL DEFAULT '',
+		blocked    INTEGER NOT NULL DEFAULT 0,
+		rules      TEXT    NOT NULL DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(scope_type, scope_key)
 	);
 	CREATE TABLE IF NOT EXISTS settings (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL DEFAULT ''
 	);
-	CREATE TABLE IF NOT EXISTS client_rules (
-		id         INTEGER PRIMARY KEY AUTOINCREMENT,
-		client_ip  TEXT    NOT NULL UNIQUE,
-		label      TEXT    NOT NULL DEFAULT '',
-		blocked    INTEGER NOT NULL DEFAULT 0,
-		rules      TEXT    NOT NULL DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+
 	CREATE TABLE IF NOT EXISTS ml_feedback (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		domain     TEXT    NOT NULL,
@@ -905,7 +907,6 @@ func (s *GuardianServer) initDB() error {
 		name       TEXT    NOT NULL,
 		label      TEXT    NOT NULL DEFAULT '',
 		blocked    INTEGER NOT NULL DEFAULT 0,
-		rules      TEXT    NOT NULL DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS client_group_members (
@@ -920,7 +921,7 @@ func (s *GuardianServer) initDB() error {
 		return err
 	}
 
-	if err := s.migrateClientRules(); err != nil {
+	if err := s.migrateRules(); err != nil {
 		return err
 	}
 
@@ -957,54 +958,20 @@ func (s *GuardianServer) initDB() error {
 	return nil
 }
 
-// migrateClientRules handles the one-time migration of the legacy
-// allow_list + block_list columns to the unified rules column.
-func (s *GuardianServer) migrateClientRules() error {
-	var hasAllowList int
-	_ = s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('client_rules') WHERE name='allow_list'`).Scan(&hasAllowList)
-	if hasAllowList == 0 {
-		return nil
-	}
-
+// migrateRules hard-cuts legacy rule storage into a unified rules table.
+func (s *GuardianServer) migrateRules() error {
 	_, _ = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS client_rules_new (
+		CREATE TABLE IF NOT EXISTS rules (
 			id         INTEGER PRIMARY KEY AUTOINCREMENT,
-			client_ip  TEXT    NOT NULL UNIQUE,
+			scope_type TEXT    NOT NULL CHECK(scope_type IN ('global','group','client')),
+			scope_key  TEXT    NOT NULL DEFAULT '',
 			label      TEXT    NOT NULL DEFAULT '',
 			blocked    INTEGER NOT NULL DEFAULT 0,
 			rules      TEXT    NOT NULL DEFAULT '',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(scope_type, scope_key)
 		)`)
-
-	rows, err := s.db.Query(`SELECT client_ip, label, blocked, allow_list, block_list, created_at FROM client_rules`)
-	if err != nil {
-		return nil // non-fatal; old table may already be gone
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var ip, label, allowList, blockList, createdAt string
-		var blocked int
-		if rows.Scan(&ip, &label, &blocked, &allowList, &blockList, &createdAt) != nil {
-			continue
-		}
-		var combined strings.Builder
-		for _, ln := range strings.Split(allowList, "\n") {
-			if d := strings.TrimSpace(ln); d != "" {
-				combined.WriteString("@@||" + d + "^\n")
-			}
-		}
-		for _, ln := range strings.Split(blockList, "\n") {
-			if d := strings.TrimSpace(ln); d != "" {
-				combined.WriteString("||" + d + "^\n")
-			}
-		}
-		_, _ = s.db.Exec(
-			`INSERT OR IGNORE INTO client_rules_new (client_ip, label, blocked, rules, created_at) VALUES (?, ?, ?, ?, ?)`,
-			ip, label, blocked, strings.TrimSpace(combined.String()), createdAt,
-		)
-	}
-	_, _ = s.db.Exec(`DROP TABLE client_rules`)
-	_, _ = s.db.Exec(`ALTER TABLE client_rules_new RENAME TO client_rules`)
 	return nil
 }
 
@@ -1018,7 +985,12 @@ func (s *GuardianServer) loadUpstreamsFromDB() {
 	if strings.TrimSpace(val) == "" {
 		return
 	}
-	if parsed := parseUpstreamServers(val); len(parsed) > 0 {
+	parsed := parseUpstreamServers(val)
+	// Strip :53 suffix from each server
+	for i, s := range parsed {
+		parsed[i] = strings.TrimSuffix(s, ":53")
+	}
+	if len(parsed) > 0 {
 		s.upstreamMu.Lock()
 		s.upstreams = parsed
 		s.upstreamMu.Unlock()
@@ -1027,7 +999,11 @@ func (s *GuardianServer) loadUpstreamsFromDB() {
 }
 
 func (s *GuardianServer) saveUpstreamsToDB(servers []string) {
-	val := strings.Join(servers, "\n")
+	stripped := make([]string, len(servers))
+	for i, s := range servers {
+		stripped[i] = strings.TrimSuffix(s, ":53")
+	}
+	val := strings.Join(stripped, "\n")
 	s.dbMu.Lock()
 	defer s.dbMu.Unlock()
 	_, _ = s.db.Exec(
@@ -1226,14 +1202,22 @@ func (s *GuardianServer) checkServiceBlock(domain, scopeKey string) bool {
 
 	for _, svcID := range svcIDs {
 		if scopeKey != "" {
-			if found, enabled, daysCSV, tStart, tEnd := queryRow("client", scopeKey, svcID); found {
+			// Determine the scope type based on whether this is a group or client key
+			var queryScope string
+			if strings.HasPrefix(scopeKey, "group:") {
+				queryScope = "group"
+			} else {
+				queryScope = "client"
+			}
+
+			if found, enabled, daysCSV, tStart, tEnd := queryRow(queryScope, scopeKey, svcID); found {
 				if enabled == 0 {
-					continue // explicitly unblocked at client level
+					continue // explicitly unblocked at client/group level
 				}
 				if withinWindow(daysCSV, tStart, tEnd) {
 					return true
 				}
-				continue // client row is authoritative; don't fall through to global
+				continue // client/group row is authoritative; don't fall through to global
 			}
 		}
 		if found, enabled, daysCSV, tStart, tEnd := queryRow("global", "", svcID); found {
@@ -1453,7 +1437,7 @@ func (s *GuardianServer) reloadAllSources() {
 // applyCustomRulesFromDB merges saved custom rules into the in-memory blocklist.
 func (s *GuardianServer) applyCustomRulesFromDB() {
 	var rules string
-	_ = s.db.QueryRow("SELECT rules FROM custom_rules ORDER BY id DESC LIMIT 1").Scan(&rules)
+	_ = s.db.QueryRow("SELECT rules FROM rules WHERE scope_type = 'global' AND scope_key = '' ORDER BY id DESC LIMIT 1").Scan(&rules)
 	if rules == "" {
 		return
 	}
@@ -1465,6 +1449,22 @@ func (s *GuardianServer) applyCustomRulesFromDB() {
 	}
 	s.blMu.Unlock()
 	s.log(LogLevelInfo, "blocklist", map[string]any{"action": "custom_rules_applied"})
+}
+
+func (s *GuardianServer) upsertRuleRow(scopeType, scopeKey, label string, blocked int, rules string) error {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	_, err := s.db.Exec(
+		`INSERT INTO rules (scope_type, scope_key, label, blocked, rules)
+				 VALUES (?, ?, ?, ?, ?)
+				 ON CONFLICT(scope_type, scope_key) DO UPDATE SET
+				   label      = excluded.label,
+				   blocked    = excluded.blocked,
+				   rules      = excluded.rules,
+				   updated_at = CURRENT_TIMESTAMP`,
+		scopeType, scopeKey, label, blocked, rules,
+	)
+	return err
 }
 
 func (s *GuardianServer) blocklistHas(domain string) bool {
@@ -1631,6 +1631,8 @@ func (s *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 	var groupScopeKey string
 	var groupBlocked int
 	var groupRules string
+	var clientBlocked int
+	var clientRules string
 	if clientIP != "unknown" {
 		var gid string
 		_ = s.db.QueryRow(`
@@ -1640,9 +1642,11 @@ func (s *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 		).Scan(&gid)
 		if gid != "" {
 			groupScopeKey = "group:" + gid
-			_ = s.db.QueryRow(`SELECT blocked, rules FROM client_groups WHERE id = ?`, gid).
+			_ = s.db.QueryRow(`SELECT blocked, rules FROM rules WHERE scope_type = 'group' AND scope_key = ?`, gid).
 				Scan(&groupBlocked, &groupRules)
 		}
+		_ = s.db.QueryRow(`SELECT blocked, rules FROM rules WHERE scope_type = 'client' AND scope_key = ?`, clientIP).
+			Scan(&clientBlocked, &clientRules)
 	}
 
 	scopeForCache := groupScopeKey
@@ -1674,27 +1678,22 @@ func (s *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 	// skipGlobalBlock is set when an allow rule matches.
 	skipGlobalBlock := false
 	if clientIP != "unknown" {
-		var clientBlocked int
-		var clientRules string
-		_ = s.db.QueryRow("SELECT blocked, rules FROM client_rules WHERE client_ip = ?", clientIP).
-			Scan(&clientBlocked, &clientRules)
-
 		if clientRules != "" {
 			if action, matched := parseClientRules(clientRules, qname); matched {
 				if action == "block" {
-					s.logQueryReason(qname, qtype, clientIP, true, "client-block", 1.0, "client-block")
+					s.logQueryReason(qname, qtype, clientIP, true, "client_rule", 1.0, "client_rule")
 					reply := s.blackholeReply(req, 300)
 					s.dnsCache.set(cacheKey, dnsCacheEntry{msg: reply.Copy(), expiresAt: time.Now().Add(dnsCacheTTL)})
 					w.WriteMsg(reply)
 					return
 				}
-				s.logQueryReason(qname, qtype, clientIP, false, "client-allow", 1.0, "client-allow")
+				s.logQueryReason(qname, qtype, clientIP, false, "client_allow", 1.0, "client_allow")
 				skipGlobalBlock = true
 			}
 		}
 
 		if !skipGlobalBlock && clientBlocked == 1 {
-			s.logQueryReason(qname, qtype, clientIP, true, "client-blocked", 1.0, "client-blocked")
+			s.logQueryReason(qname, qtype, clientIP, true, "client_blocked", 1.0, "client_blocked")
 			reply := s.blackholeReply(req, 300)
 			s.dnsCache.set(cacheKey, dnsCacheEntry{msg: reply.Copy(), expiresAt: time.Now().Add(dnsCacheTTL)})
 			w.WriteMsg(reply)
@@ -1704,19 +1703,19 @@ func (s *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 		if !skipGlobalBlock && groupRules != "" {
 			if action, matched := parseClientRules(groupRules, qname); matched {
 				if action == "block" {
-					s.logQueryReason(qname, qtype, clientIP, true, "group-block", 1.0, "group-block")
+					s.logQueryReason(qname, qtype, clientIP, true, "group_rule", 1.0, "group_rule")
 					reply := s.blackholeReply(req, 300)
 					s.dnsCache.set(cacheKey, dnsCacheEntry{msg: reply.Copy(), expiresAt: time.Now().Add(dnsCacheTTL)})
 					w.WriteMsg(reply)
 					return
 				}
-				s.logQueryReason(qname, qtype, clientIP, false, "group-allow", 1.0, "group-allow")
+				s.logQueryReason(qname, qtype, clientIP, false, "group_allow", 1.0, "group_allow")
 				skipGlobalBlock = true
 			}
 		}
 
 		if !skipGlobalBlock && groupBlocked == 1 {
-			s.logQueryReason(qname, qtype, clientIP, true, "group-blocked", 1.0, "group-blocked")
+			s.logQueryReason(qname, qtype, clientIP, true, "group_blocked", 1.0, "group_blocked")
 			reply := s.blackholeReply(req, 300)
 			s.dnsCache.set(cacheKey, dnsCacheEntry{msg: reply.Copy(), expiresAt: time.Now().Add(dnsCacheTTL)})
 			w.WriteMsg(reply)
@@ -1848,6 +1847,9 @@ func (s *GuardianServer) queryUpstreams(req *dns.Msg) (*dns.Msg, error) {
 }
 
 func singleUpstreamLookup(ctx context.Context, req *dns.Msg, addr string) (*dns.Msg, error) {
+	if !strings.Contains(addr, ":") {
+		addr += ":53"
+	}
 	client := &dns.Client{Timeout: 2 * time.Second, Net: "udp"}
 	if resp, _, err := client.ExchangeContext(ctx, req, addr); err == nil {
 		return resp, nil
@@ -1864,9 +1866,6 @@ func parseUpstreamServers(raw string) []string {
 		addr := strings.TrimSpace(field)
 		if addr == "" {
 			continue
-		}
-		if !strings.Contains(addr, ":") {
-			addr += ":53"
 		}
 		upstreams = append(upstreams, addr)
 	}
@@ -2316,7 +2315,7 @@ func (s *GuardianServer) handleGetQueries(w http.ResponseWriter, r *http.Request
 		            FROM client_group_members cgm
 		            JOIN client_groups cg ON cg.id = cgm.group_id
 		            WHERE cgm.identifier = q.client_ip LIMIT 1),
-		           (SELECT cr.label FROM client_rules cr WHERE cr.client_ip = q.client_ip LIMIT 1),
+		           (SELECT r.label FROM rules r WHERE r.scope_type = 'client' AND r.scope_key = q.client_ip LIMIT 1),
 		           ''
 		       ) AS client_label,
 		       COALESCE(q.reason, q.category, '') AS reason
@@ -2337,8 +2336,8 @@ func (s *GuardianServer) handleGetQueries(w http.ResponseWriter, r *http.Request
 				WHERE cgm.identifier = q.client_ip AND cg.name LIKE ?
 			)
 			OR EXISTS (
-				SELECT 1 FROM client_rules cr
-				WHERE cr.client_ip = q.client_ip AND cr.label LIKE ?
+				SELECT 1 FROM rules r
+				WHERE r.scope_type = 'client' AND r.scope_key = q.client_ip AND r.label LIKE ?
 			))`
 		args = append(args, "%"+q+"%", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
@@ -2407,7 +2406,7 @@ func (s *GuardianServer) handleQuickAllow(w http.ResponseWriter, r *http.Request
 
 	s.dbMu.Lock()
 	var existing string
-	_ = s.db.QueryRow("SELECT rules FROM custom_rules LIMIT 1").Scan(&existing)
+	_ = s.db.QueryRow("SELECT rules FROM rules WHERE scope_type = 'global' AND scope_key = '' LIMIT 1").Scan(&existing)
 	alreadyPresent := false
 	for _, l := range strings.Split(strings.TrimSpace(existing), "\n") {
 		if strings.TrimSpace(l) == allowRule {
@@ -2421,10 +2420,7 @@ func (s *GuardianServer) handleQuickAllow(w http.ResponseWriter, r *http.Request
 			updated += "\n"
 		}
 		updated += allowRule
-		if existing == "" {
-			_, _ = s.db.Exec("INSERT OR IGNORE INTO custom_rules (rules) VALUES (?)", updated)
-		}
-		_, _ = s.db.Exec("UPDATE custom_rules SET rules = ?", updated)
+		_ = s.upsertRuleRow("global", "", "global_rules", 0, updated)
 	}
 	s.dbMu.Unlock()
 
@@ -2539,7 +2535,7 @@ func (s *GuardianServer) handleDNSTest(w http.ResponseWriter, r *http.Request, _
 	if clientIP != "" {
 		var clientBlocked int
 		var clientRules string
-		_ = s.db.QueryRow("SELECT blocked, rules FROM client_rules WHERE client_ip = ?", clientIP).
+		_ = s.db.QueryRow("SELECT blocked, rules FROM rules WHERE scope_type = 'client' AND scope_key = ?", clientIP).
 			Scan(&clientBlocked, &clientRules)
 
 		if clientRules != "" {
@@ -2566,7 +2562,7 @@ func (s *GuardianServer) handleDNSTest(w http.ResponseWriter, r *http.Request, _
 			gidStr := strings.TrimPrefix(serviceScopeKey, "group:")
 			var groupBlocked int
 			var groupRules string
-			_ = s.db.QueryRow(`SELECT blocked, rules FROM client_groups WHERE id = ?`, gidStr).
+			_ = s.db.QueryRow(`SELECT blocked, rules FROM rules WHERE scope_type = 'group' AND scope_key = ?`, gidStr).
 				Scan(&groupBlocked, &groupRules)
 			if groupRules != "" {
 				action, matched := parseClientRules(groupRules, domain)
@@ -2684,7 +2680,7 @@ func (s *GuardianServer) registerBlocklistHandlers(dev bool) {
 	http.HandleFunc("/api/blocklist/clear", s.withAuth(dev, http.MethodPost, func(w http.ResponseWriter, r *http.Request, _ string) {
 		s.dbMu.Lock()
 		_, _ = s.db.Exec("DELETE FROM blocklist_sources")
-		_, _ = s.db.Exec("DELETE FROM custom_rules")
+		_, _ = s.db.Exec("DELETE FROM rules WHERE scope_type = 'global' AND scope_key = ''")
 		s.dbMu.Unlock()
 		s.blMu.Lock()
 		s.blocklist = make(map[string]struct{})
@@ -2694,7 +2690,7 @@ func (s *GuardianServer) registerBlocklistHandlers(dev bool) {
 		jsonOK(w, map[string]any{"ok": true})
 	}))
 	http.HandleFunc("/api/blocklist/toggle", s.withAuthAny(dev, s.handleBlocklistToggle))
-	http.HandleFunc("/api/blocklist/rules", s.withAuthAny(dev, s.handleBlocklistRules))
+	http.HandleFunc("/api/rules", s.withAuthAny(dev, s.handleRules))
 }
 
 func (s *GuardianServer) handleBlocklist(w http.ResponseWriter, r *http.Request, _ string) {
@@ -2855,25 +2851,46 @@ func (s *GuardianServer) handleBlocklistToggle(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (s *GuardianServer) handleBlocklistRules(w http.ResponseWriter, r *http.Request, _ string) {
+func (s *GuardianServer) handleRules(w http.ResponseWriter, r *http.Request, _ string) {
 	switch r.Method {
 	case http.MethodGet:
+		scope := r.URL.Query().Get("scope")
+		scopeKey := r.URL.Query().Get("key")
+		if scope == "" {
+			scope = "global"
+			scopeKey = ""
+		}
 		var rules string
-		_ = s.db.QueryRow("SELECT rules FROM custom_rules ORDER BY id DESC LIMIT 1").Scan(&rules)
+		_ = s.db.QueryRow("SELECT rules FROM rules WHERE scope_type = ? AND scope_key = ? ORDER BY id DESC LIMIT 1", scope, scopeKey).Scan(&rules)
 		jsonOK(w, map[string]any{"rules": rules})
 	case http.MethodPost:
 		var body struct {
-			Rules string `json:"rules"`
+			ScopeType string `json:"scope_type"`
+			ScopeKey  string `json:"scope_key"`
+			Label     string `json:"label"`
+			Blocked   bool   `json:"blocked"`
+			Rules     string `json:"rules"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonErr(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		s.dbMu.Lock()
-		_, _ = s.db.Exec("DELETE FROM custom_rules")
-		_, _ = s.db.Exec("INSERT INTO custom_rules (rules) VALUES (?)", body.Rules)
-		s.dbMu.Unlock()
-		go s.reloadAllSources()
+		if body.ScopeType == "" || body.ScopeType == "global" {
+			if err := s.upsertRuleRow("global", "", "global_rules", 0, body.Rules); err != nil {
+				jsonErr(w, "db error", http.StatusInternalServerError)
+				return
+			}
+			go s.reloadAllSources()
+		} else {
+			blockedInt := 0
+			if body.Blocked {
+				blockedInt = 1
+			}
+			if err := s.upsertRuleRow(body.ScopeType, body.ScopeKey, body.Label, blockedInt, body.Rules); err != nil {
+				jsonErr(w, "db error", http.StatusInternalServerError)
+				return
+			}
+		}
 		jsonOK(w, map[string]any{"ok": true})
 	default:
 		jsonErr(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -2898,17 +2915,19 @@ func (s *GuardianServer) handleServices(w http.ResponseWriter, r *http.Request, 
 		}
 		scopeKey := r.URL.Query().Get("key")
 
-		// merged=1 returns the effective schedule for each service: client row
-		// if present, otherwise global row, with a "source" field for the UI.
-		if r.URL.Query().Get("merged") == "1" && scope == "client" && scopeKey != "" {
-			clientRows := s.fetchScheduleRows("client", scopeKey)
+		// merged=1 returns the effective schedule for each service: scope-specific row
+		// (client or group) if present, otherwise global row, with a "source" field for the UI.
+		if r.URL.Query().Get("merged") == "1" && (scope == "client" || scope == "group") && scopeKey != "" {
+			// fetch rows for requested scope (client or group) and merge with global rows;
+			// the requested-scope rows win over global.
+			rows := s.fetchScheduleRows(scope, scopeKey)
 			globalRows := s.fetchScheduleRows("global", "")
 			out := map[string]map[string]any{}
 			for id, row := range globalRows {
 				out[id] = row
 			}
-			for id, row := range clientRows {
-				out[id] = row // client always wins
+			for id, row := range rows {
+				out[id] = row // requested scope (client or group) always wins
 			}
 			jsonOK(w, out)
 			return
@@ -3047,7 +3066,7 @@ func (s *GuardianServer) handleClients(w http.ResponseWriter, r *http.Request, _
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := s.db.Query(
-			"SELECT id, client_ip, label, blocked, rules, created_at FROM client_rules ORDER BY id",
+			"SELECT id, scope_type, scope_key, label, blocked, rules, created_at FROM rules WHERE scope_type = 'client' ORDER BY id",
 		)
 		if err != nil {
 			jsonErr(w, "db error", http.StatusInternalServerError)
@@ -3057,15 +3076,18 @@ func (s *GuardianServer) handleClients(w http.ResponseWriter, r *http.Request, _
 		out := []map[string]any{}
 		for rows.Next() {
 			var id, blocked int
-			var ip, label, rules, createdAt string
-			if rows.Scan(&id, &ip, &label, &blocked, &rules, &createdAt) == nil {
+			var scopeType, scopeKey, label, rules, createdAt string
+			if rows.Scan(&id, &scopeType, &scopeKey, &label, &blocked, &rules, &createdAt) == nil {
 				out = append(out, map[string]any{
-					"id":         id,
-					"client_ip":  ip,
-					"label":      label,
-					"blocked":    blocked == 1,
-					"rules":      rules,
-					"created_at": createdAt,
+					"id":           id,
+					"scope_type":   scopeType,
+					"scope_key":    scopeKey,
+					"client_ip":    scopeKey,
+					"label":        label,
+					"blocked":      blocked == 1,
+					"rules":        rules,
+					"created_at":   createdAt,
+					"display_name": label,
 				})
 			}
 		}
@@ -3086,18 +3108,7 @@ func (s *GuardianServer) handleClients(w http.ResponseWriter, r *http.Request, _
 		if body.Blocked {
 			blockedInt = 1
 		}
-		s.dbMu.Lock()
-		_, err := s.db.Exec(
-			`INSERT INTO client_rules (client_ip, label, blocked, rules)
-				 VALUES (?, ?, ?, ?)
-				 ON CONFLICT(client_ip) DO UPDATE SET
-				   label   = excluded.label,
-				   blocked = excluded.blocked,
-				   rules   = excluded.rules`,
-			body.ClientIP, body.Label, blockedInt, body.Rules,
-		)
-		s.dbMu.Unlock()
-		if err != nil {
+		if err := s.upsertRuleRow("client", body.ClientIP, body.Label, blockedInt, body.Rules); err != nil {
 			jsonErr(w, "db error", http.StatusInternalServerError)
 			return
 		}
@@ -3113,7 +3124,7 @@ func (s *GuardianServer) handleClients(w http.ResponseWriter, r *http.Request, _
 			return
 		}
 		s.dbMu.Lock()
-		_, err := s.db.Exec("DELETE FROM client_rules WHERE client_ip = ?", body.ClientIP)
+		_, err := s.db.Exec("DELETE FROM rules WHERE scope_type = 'client' AND scope_key = ?", body.ClientIP)
 		s.dbMu.Unlock()
 		if err != nil {
 			jsonErr(w, "db error", http.StatusInternalServerError)
@@ -3138,7 +3149,7 @@ func (s *GuardianServer) handleGroups(w http.ResponseWriter, r *http.Request, _ 
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := s.db.Query(
-			`SELECT id, name, label, blocked, rules, created_at FROM client_groups ORDER BY id`,
+			`SELECT id, name, label, blocked, created_at FROM client_groups ORDER BY id`,
 		)
 		if err != nil {
 			jsonErr(w, "db error", http.StatusInternalServerError)
@@ -3150,7 +3161,7 @@ func (s *GuardianServer) handleGroups(w http.ResponseWriter, r *http.Request, _ 
 			Name      string           `json:"name"`
 			Label     string           `json:"label"`
 			Blocked   bool             `json:"blocked"`
-			Rules     string           `json:"rules"`
+			RuleCount int              `json:"rule_count"`
 			CreatedAt string           `json:"created_at"`
 			Members   []map[string]any `json:"members"`
 		}
@@ -3158,9 +3169,10 @@ func (s *GuardianServer) handleGroups(w http.ResponseWriter, r *http.Request, _ 
 		for rows.Next() {
 			var g groupRow
 			var blocked int
-			if rows.Scan(&g.ID, &g.Name, &g.Label, &blocked, &g.Rules, &g.CreatedAt) == nil {
+			if rows.Scan(&g.ID, &g.Name, &g.Label, &blocked, &g.CreatedAt) == nil {
 				g.Blocked = blocked == 1
 				g.Members = []map[string]any{}
+				g.RuleCount = 0
 				groups = append(groups, g)
 			}
 		}
@@ -3196,7 +3208,6 @@ func (s *GuardianServer) handleGroups(w http.ResponseWriter, r *http.Request, _ 
 			Name    string `json:"name"`
 			Label   string `json:"label"`
 			Blocked bool   `json:"blocked"`
-			Rules   string `json:"rules"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
 			jsonErr(w, "bad request", http.StatusBadRequest)
@@ -3212,16 +3223,16 @@ func (s *GuardianServer) handleGroups(w http.ResponseWriter, r *http.Request, _ 
 		if body.ID == 0 {
 			var res sql.Result
 			res, dbErr = s.db.Exec(
-				`INSERT INTO client_groups (name, label, blocked, rules) VALUES (?, ?, ?, ?)`,
-				body.Name, body.Label, blockedInt, body.Rules,
+				`INSERT INTO client_groups (name, label, blocked) VALUES (?, ?, ?)`,
+				body.Name, body.Label, blockedInt,
 			)
 			if dbErr == nil {
 				newID, _ = res.LastInsertId()
 			}
 		} else {
 			_, dbErr = s.db.Exec(
-				`UPDATE client_groups SET name=?, label=?, blocked=?, rules=? WHERE id=?`,
-				body.Name, body.Label, blockedInt, body.Rules, body.ID,
+				`UPDATE client_groups SET name=?, label=?, blocked=? WHERE id=?`,
+				body.Name, body.Label, blockedInt, body.ID,
 			)
 			newID = int64(body.ID)
 		}
@@ -3316,18 +3327,42 @@ func (s *GuardianServer) registerUpstreamHandlers(dev bool) {
 		switch r.Method {
 		case http.MethodGet:
 			s.upstreamMu.RLock()
-			servers := strings.Join(s.upstreams, "\n")
+			servers := append([]string(nil), s.upstreams...)
 			s.upstreamMu.RUnlock()
+			// Strip :53 suffix for UI display
+			for i, s := range servers {
+				if strings.HasSuffix(s, ":53") {
+					servers[i] = strings.TrimSuffix(s, ":53")
+				}
+			}
 			jsonOK(w, map[string]any{"servers": servers})
 		case http.MethodPost:
-			var body struct {
-				Servers string `json:"servers"`
+			var raw struct {
+				Servers json.RawMessage `json:"servers"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 				jsonErr(w, "bad request", http.StatusBadRequest)
 				return
 			}
-			newUpstreams := parseUpstreamServers(body.Servers)
+
+			var joined string
+			if len(raw.Servers) == 0 || string(raw.Servers) == "null" {
+				joined = ""
+			} else {
+				var asString string
+				if err := json.Unmarshal(raw.Servers, &asString); err == nil {
+					joined = asString
+				} else {
+					var asArray []string
+					if err := json.Unmarshal(raw.Servers, &asArray); err != nil {
+						jsonErr(w, "bad request", http.StatusBadRequest)
+						return
+					}
+					joined = strings.Join(asArray, "\n")
+				}
+			}
+
+			newUpstreams := parseUpstreamServers(joined)
 			if len(newUpstreams) == 0 {
 				jsonErr(w, "at least one upstream server required", http.StatusBadRequest)
 				return
@@ -3787,7 +3822,6 @@ func main() {
 	logLevelStr := flag.String("log-level", "warn", "Log level (error, warn, info, debug)")
 	verbose := flag.Bool("verbose", false, "Enable info-level logging (shorthand for --log-level info)")
 	frontendDev := flag.Bool("frontend-dev", false, "Enable CORS for Vite dev server at http://localhost:5173")
-	_ = flag.Bool("one-exe", true, "Deprecated: always-on (kept for backward compatibility)")
 	flag.Parse()
 
 	if *verbose && *logLevelStr == "warn" {

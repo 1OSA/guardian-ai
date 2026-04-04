@@ -9,14 +9,14 @@ import type {
 } from "../lib/types";
 
 export type ServiceBlockListProps = {
-  scope: "global" | "client";
+  scope: "global" | "client" | "group";
   defs: ServiceDef[];
-  /** In client scope this must be the merged schedule (merged=1 API param),
-   *  so every entry carries a source field ("client" | "global"). */
+  /** In client/group scope this must be the merged schedule (merged=1 API param),
+   *  so every entry carries a source field ("client" | "group" | "global"). */
   schedules: ServiceScheduleMap;
   saving: string | null;
   onSave: (svcId: string, patch: Partial<ServiceSchedule>) => void;
-  /** Called when the user removes a client override row (reverts to inheriting global). */
+  /** Called when the user removes a client/group override row (reverts to inheriting global). */
   onReset?: (svcId: string) => void;
 };
 
@@ -131,7 +131,9 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
         const sched = getSchedule(svc.id);
         const isExpanded = expanded === svc.id;
         const isSaving = saving === svc.id;
-        const hasOverride = scope === "client" && sched.source === "client";
+        // Treat any non-global source (e.g., 'client' or 'group') as an override for client scope
+        const hasOverride =
+          scope === "client" && !!sched.source && sched.source !== "global";
         const isInheriting = scope === "client" && !hasOverride;
         const effectiveEnabled = sched.enabled;
         const hasSchedule = !!(
@@ -215,52 +217,99 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
               {/* block toggle */}
               <button
                 onClick={() => {
-                  if (scope === "client" && isInheriting) {
+                  // Global scope: simple toggle (anything that's not client/group)
+                  if (!(scope === "client" || scope === "group")) {
+                    onSave(svc.id, { enabled: !sched.enabled });
+                    return;
+                  }
+
+                  // Client scope: cycle through states
+                  // - If inheriting: create a client override -> Blocked (enabled=true)
+                  // - If has override and client-blocked: switch to client-unblocked (enabled=false)
+                  // - If has override and client-unblocked: remove override (inherit)
+                  if (isInheriting) {
+                    // Create an override with the opposite of the effective (global) value.
+                    // If the service is blocked globally, this will create an explicit unblocked override.
                     onSave(svc.id, { enabled: !effectiveEnabled });
                   } else {
-                    onSave(svc.id, { enabled: !sched.enabled });
+                    if (sched.enabled) {
+                      // Currently client override is Blocked -> switch to Allowed (explicit unblocked)
+                      onSave(svc.id, { enabled: false });
+                    } else {
+                      // Currently client override is Unblocked -> remove override (inherit)
+                      if (onReset) onReset(svc.id);
+                    }
                   }
                 }}
                 disabled={isSaving}
                 title={
-                  isInheriting
-                    ? effectiveEnabled
-                      ? "Override global: unblock for this client"
-                      : "Override global: block for this client"
+                  scope === "client"
+                    ? isInheriting
+                      ? effectiveEnabled
+                        ? "Inheriting a global block — click to create a client override (Blocked). Click again to switch to Allowed."
+                        : "Inheriting a global allow — click to create a client override (Blocked)."
+                      : sched.enabled
+                        ? "Client override: Blocked. Click to switch to Allowed (explicitly allow for this client)."
+                        : "Client override: Allowed (explicitly allowed). Click to remove override and revert to Inherit."
                     : sched.enabled
-                      ? "Click to unblock (client override)"
-                      : "Click to block (client override)"
+                      ? "Click to unblock (global)"
+                      : "Click to block (global)"
                 }
                 className="flex items-center gap-1 px-2.5 py-1.25 rounded-md text-[11px] font-bold shrink-0 cursor-pointer disabled:cursor-wait"
                 style={{
                   border: `1px solid ${
-                    effectiveEnabled
-                      ? "#7a3333"
-                      : isInheriting
-                        ? "#2a2a2a"
+                    // Highlight red when the effective or override is blocked
+                    scope === "client"
+                      ? isInheriting
+                        ? effectiveEnabled
+                          ? "#7a3333"
+                          : "#2a2a2a"
+                        : sched.enabled
+                          ? "#7a3333"
+                          : "#2a3a2a"
+                      : sched.enabled
+                        ? "#7a3333"
                         : "#2a3a2a"
                   }`,
-                  background: effectiveEnabled
-                    ? "#2a1414"
-                    : isInheriting
-                      ? "#111"
-                      : "#141a14",
-                  color: effectiveEnabled
-                    ? "#c0392b"
-                    : isInheriting
-                      ? "#444"
-                      : "#798777",
+                  background:
+                    scope === "client"
+                      ? isInheriting
+                        ? effectiveEnabled
+                          ? "#2a1414"
+                          : "#111"
+                        : sched.enabled
+                          ? "#2a1414"
+                          : "#141a14"
+                      : sched.enabled
+                        ? "#2a1414"
+                        : "#141a14",
+                  color:
+                    scope === "client"
+                      ? isInheriting
+                        ? effectiveEnabled
+                          ? "#c0392b"
+                          : "#444"
+                        : sched.enabled
+                          ? "#c0392b"
+                          : "#798777"
+                      : sched.enabled
+                        ? "#c0392b"
+                        : "#798777",
                   opacity: isSaving ? 0.6 : 1,
                 }}
               >
                 <FaLock className="text-[9px]" />
-                {effectiveEnabled
+                {scope === "client"
                   ? isInheriting
-                    ? "Blocked (global)"
-                    : "Blocked"
-                  : isInheriting
-                    ? "Inherit"
-                    : "Blocked off"}
+                    ? effectiveEnabled
+                      ? "Blocked (global)"
+                      : "Inherit"
+                    : sched.enabled
+                      ? "Blocked"
+                      : "Allowed"
+                  : sched.enabled
+                    ? "Blocked"
+                    : "Allowed"}
               </button>
             </div>
 
