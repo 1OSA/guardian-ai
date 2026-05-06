@@ -29,8 +29,6 @@ interface ClientGroupCardProps {
   editLabel: string;
   editBlocked: boolean;
   editRules: string;
-  scopeType?: "global" | "group" | "client";
-  scopeKey?: string;
   editTab: "rules" | "services";
   editSaveStatus: EditSaveStatus;
   setEditName: (v: string) => void;
@@ -80,8 +78,6 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
   editLabel,
   editBlocked,
   editRules,
-  scopeType,
-  scopeKey,
   editTab,
   editSaveStatus,
   setEditName,
@@ -163,9 +159,6 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
             {g.label && (
               <span className="text-[12px] text-text-faint">{g.label}</span>
             )}
-            <span className="text-[10px] px-1.75 py-px rounded-[10px] bg-[#1a1a2a] text-[#7a8fa0] border border-[#2a2a3a]">
-              {scopeType ?? "group"}:{scopeKey ?? g.id}
-            </span>
             {chipStatus(!g.blocked)}
             <span className="text-[10px] px-1.75 py-px rounded-[10px] bg-[#1a1a2a] text-[#7a8fa0] border border-[#2a2a3a]">
               {g.members.length} {g.members.length === 1 ? "device" : "devices"}

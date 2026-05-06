@@ -7,15 +7,20 @@ export type AuthContextType = {
 };
 
 export type QueryRow = {
+  id: string;
   timestamp: string;
   domain: string;
-  qtype: number;
+  qtype: string;
   client_ip: string;
   client_label?: string;
+  result: string;
+  blocked_by: string;
   blocked: boolean;
+  is_malicious: boolean;
   category?: string;
   confidence?: number;
   reason?: string;
+  response_time_ms?: number;
 };
 
 export type RuleScopeType = "global" | "group" | "client";

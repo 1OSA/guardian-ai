@@ -37,7 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const login = async (username: string, password: string) => {
     setLoading(true);
     try {
-      await axios.post("/api/login", { username, password });
+      await axios.post("/api/auth/login", { username, password });
       const userRes = await axios.get("/api/user");
       setUser(userRes.data.username);
     } finally {
@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const logout = async () => {
     try {
-      await axios.post("/api/logout");
+      await axios.post("/api/auth/logout");
     } catch {
       // ignore error
     } finally {

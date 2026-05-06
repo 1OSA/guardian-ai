@@ -53,6 +53,7 @@ type StatsData = {
   top_blocked: { domain: string; count: number }[];
   qtype_breakdown: { qtype: number; label: string; count: number }[];
   cat_breakdown: { category: string; count: number }[];
+  block_reasons: { reason: string; count: number }[];
   ml_enabled: boolean;
   ml_connected: boolean;
 };
@@ -89,9 +90,17 @@ const DashboardPage: React.FC = () => {
   const fetchRecent = React.useCallback(async () => {
     try {
       const res = await axios.get("/api/queries?limit=20");
+      console.log("[fetchRecent] API response:", res.data);
+      if (res.data && res.data.length > 0) {
+        console.log(
+          "[fetchRecent] First item timestamp:",
+          res.data[0].timestamp,
+        );
+        console.log("[fetchRecent] All fields:", Object.keys(res.data[0]));
+      }
       setRecent(res.data as QueryRow[]);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.error("[fetchRecent] Error:", err);
     }
   }, []);
 
@@ -331,11 +340,11 @@ const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* category breakdown */}
+          {/* block reasons */}
           <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden">
             <ListHeader title="Block Reasons" />
-            {(stats?.cat_breakdown ?? []).map((c) => {
-              const colors = reasonBadgeColor(c.category) ?? {
+            {(stats?.block_reasons ?? []).map((b) => {
+              const colors = reasonBadgeColor(b.reason) ?? {
                 bg: "#1e2a1e",
                 fg: "#80b080",
                 border: "#2a4a2a",
@@ -343,7 +352,7 @@ const DashboardPage: React.FC = () => {
               const { fg: color, bg } = colors;
               return (
                 <div
-                  key={c.category}
+                  key={b.reason}
                   className="flex items-center justify-between px-4 py-1.75 border-b border-surface-1"
                 >
                   <span
@@ -354,15 +363,15 @@ const DashboardPage: React.FC = () => {
                       border: `1px solid ${colors.border}`,
                     }}
                   >
-                    {c.category}
+                    {b.reason}
                   </span>
                   <span className="text-[12px] text-text-faint tabular-nums">
-                    {c.count.toLocaleString()}
+                    {b.count.toLocaleString()}
                   </span>
                 </div>
               );
             })}
-            {(stats?.cat_breakdown ?? []).length === 0 && (
+            {(stats?.block_reasons ?? []).length === 0 && (
               <div className="p-4 text-center text-text-dead text-[13px]">
                 No blocks yet
               </div>

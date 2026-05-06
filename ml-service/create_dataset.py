@@ -264,7 +264,8 @@ def generate_attacks(domain_list, num_needed):
         # idn: Swap latin chars for Cyrillic/Greek lookalikes
         # visual: Swap chars for ASCII lookalikes
         # typo: Fat finger / omission
-        strategy = random.choice(["idn", "visual", "typo"])
+        # keyword: Add phishing keywords (secure, login, etc)
+        strategy = random.choice(["idn", "visual", "typo", "keyword"])
         new_name = list(name)
 
         try:
@@ -295,6 +296,25 @@ def generate_attacks(domain_list, num_needed):
                 if len(name) > 3:
                     idx = random.randint(0, len(name) - 2)
                     new_name[idx], new_name[idx + 1] = new_name[idx + 1], new_name[idx]
+
+            elif strategy == "keyword":
+                keywords = [
+                    "secure",
+                    "login",
+                    "auth",
+                    "verify",
+                    "support",
+                    "billing",
+                    "update",
+                    "account",
+                ]
+                separator = random.choice(["-", ""])
+                prefix_suffix = random.choice(["prefix", "suffix"])
+                kw = random.choice(keywords)
+                if prefix_suffix == "prefix":
+                    new_name = list(kw + separator + name)
+                else:
+                    new_name = list(name + separator + kw)
 
             final_domain = "".join(new_name) + "." + tld
             if final_domain != target:

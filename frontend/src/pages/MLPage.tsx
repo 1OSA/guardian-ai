@@ -23,6 +23,7 @@ const MLPage: React.FC = () => {
   const [blockPhishing, setBlockPhishing] = useState(true);
   const [blockMalware, setBlockMalware] = useState(true);
   const [blockOther, setBlockOther] = useState(true);
+  const [mlEnabled, setMlEnabled] = useState(true);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -35,6 +36,7 @@ const MLPage: React.FC = () => {
       setBlockPhishing(d.block_phishing);
       setBlockMalware(d.block_malware);
       setBlockOther(d.block_other);
+      setMlEnabled((d as any).enabled ?? true);
     } catch {
       /* ignore */
     } finally {
@@ -45,6 +47,15 @@ const MLPage: React.FC = () => {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const toggleML = async (val: boolean) => {
+    setMlEnabled(val);
+    try {
+      await axios.post("/api/ml/settings", { enabled: val });
+    } catch {
+      /* ignore */
+    }
+  };
 
   const save = React.useCallback(
     async (patch: {
@@ -90,9 +101,16 @@ const MLPage: React.FC = () => {
   return (
     <div className={isMobile ? "p-3" : "p-6"}>
       {/* header */}
-      <div className="flex items-center gap-2 mb-5">
-        <FaBrain style={{ color: ACCENT, fontSize: 16 }} />
-        <span className="text-xl font-bold text-text">Threat Detection</span>
+      <div className="flex items-center justify-between gap-2 mb-5">
+        <div className="flex items-center gap-2">
+          <FaBrain style={{ color: ACCENT, fontSize: 16 }} />
+          <span className="text-xl font-bold text-text">Threat Detection</span>
+        </div>
+        <ToggleSwitch
+          checked={mlEnabled}
+          onChange={toggleML}
+          label={mlEnabled ? "Enabled" : "Disabled"}
+        />
       </div>
 
       {loading ? (

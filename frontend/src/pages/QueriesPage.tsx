@@ -35,12 +35,13 @@ const QueriesPage: React.FC = () => {
     const key = r.domain + "|" + r.timestamp;
     if (feedbackSent[key]) return;
     try {
+      const backendVerdict =
+        verdict === "safe" ? "false_positive" : "false_negative";
       await axios.post("/api/ml/feedback", {
         domain: r.domain,
-        verdict,
-        category: r.category ?? "",
-        confidence: r.confidence ?? 0,
-        client_ip: r.client_ip,
+        verdict: backendVerdict,
+        user_confidence: r.confidence ?? 0,
+        domain_query_id: r.id,
       });
       setFeedbackSent((prev) => ({ ...prev, [key]: verdict }));
     } catch {

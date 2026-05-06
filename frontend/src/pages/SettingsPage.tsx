@@ -40,7 +40,6 @@ const SettingsPage: React.FC = () => {
   const [newPassword, setNewPassword] = useState("");
   const [pwChanged, setPwChanged] = useState(false);
   const [blocklistEnabled, setBlocklistEnabled] = useState(true);
-  const [mlEnabled, setMlEnabled] = useState(true);
 
   const [upstreamSaveStatus, setUpstreamSaveStatus] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -116,8 +115,8 @@ const SettingsPage: React.FC = () => {
 
   const fetchBlocklist = async () => {
     try {
-      const res = await axios.get("/api/blocklist");
-      setBlocklist(res.data as string[]);
+      const res = await axios.get("/api/blocklist/stats");
+      setBlocklist(new Array(res.data.total_entries));
     } catch {
       /* ignore */
     }
@@ -194,11 +193,7 @@ const SettingsPage: React.FC = () => {
 
   const fetchToggles = async () => {
     try {
-      const [mlRes, blRes] = await Promise.all([
-        axios.get("/api/ml/settings"),
-        axios.get("/api/blocklist/enabled"),
-      ]);
-      setMlEnabled((mlRes.data as { enabled: boolean }).enabled ?? true);
+      const blRes = await axios.get("/api/blocklist/enabled");
       setBlocklistEnabled((blRes.data as { enabled: boolean }).enabled ?? true);
     } catch {
       /* ignore */
@@ -315,15 +310,6 @@ const SettingsPage: React.FC = () => {
     setBlocklistEnabled(val);
     try {
       await axios.post("/api/blocklist/enabled", { enabled: val });
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const toggleML = async (val: boolean) => {
-    setMlEnabled(val);
-    try {
-      await axios.post("/api/ml/settings", { enabled: val });
     } catch {
       /* ignore */
     }
@@ -581,11 +567,6 @@ const SettingsPage: React.FC = () => {
                       }}
                     />
                   </button>
-                  <ToggleSwitch
-                    checked={mlEnabled}
-                    onChange={toggleML}
-                    label="ML"
-                  />
                   <ToggleSwitch
                     checked={blocklistEnabled}
                     onChange={toggleBlocklist}

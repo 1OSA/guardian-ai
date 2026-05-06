@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { FaThumbsUp, FaThumbsDown } from "react-icons/fa";
-import { ACCENT, QTYPE_MAP } from "../lib/constants";
+import { ACCENT } from "../lib/constants";
 import {
   formatTime,
   relativeTime,
@@ -85,7 +85,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
         {rows.map((r, i) => {
           const conf = r.confidence ?? 0;
           const confPct = Math.round(conf * 100);
-          const qtypeLabel = QTYPE_MAP[r.qtype] ?? String(r.qtype);
+          const qtypeLabel = String(r.qtype) || "UNKNOWN";
           const cat = (r.category ?? "").toLowerCase();
           const reasonRaw = (r.reason || r.category || "").toLowerCase();
           const isML =
@@ -93,7 +93,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
             cat.includes("phishing") ||
             cat.includes("dga") ||
             cat.includes("malware");
-          const fbKey = r.domain + "|" + r.timestamp;
+          const fbKey = r.id || r.domain + "|" + r.timestamp;
           const fbSent = feedbackSent[fbKey];
           const qaState = quickAction[r.domain];
           const label = reasonLabel(r.category, r.reason);

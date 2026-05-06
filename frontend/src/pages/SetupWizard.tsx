@@ -124,8 +124,8 @@ const SetupWizard: React.FC<{
       }
       setLoading(true);
       try {
-        await axios.post("/api/setup", { username, password });
-        const ipRes = await axios.get("/api/current-ip");
+        await axios.post("/api/auth/setup", { username, password });
+        const ipRes = await axios.get("/api/auth/current-ip");
         setCurrentIP(ipRes.data.ip);
         setStep(2);
         setError(null);

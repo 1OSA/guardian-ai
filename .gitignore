@@ -47,6 +47,12 @@ logs/
 *.db-shm
 *.db-wal
 
+# --- Documentation ---
+*.docx
+*.md
+!README.md
+!frontend/README.md
+
 # --- Runtime-generated ---
 blocklists/
 presentation_assets/

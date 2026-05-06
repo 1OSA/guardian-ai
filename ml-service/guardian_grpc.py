@@ -108,8 +108,8 @@ def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     guardian_pb2_grpc.add_GuardianAIServicer_to_server(GuardianService(), server)
 
-    server.add_insecure_port("[::]:50051")
-    print("[*] gRPC Server running on port 50051 ...")
+    server.add_insecure_port("127.0.0.1:50051")
+    print("[*] gRPC Server running on 127.0.0.1:50051 ...")
     server.start()
     try:
         server.wait_for_termination()

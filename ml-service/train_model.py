@@ -21,9 +21,9 @@ from tensorflow.keras.utils import to_categorical
 
 # --- CONFIG ---
 MAX_LEN = 75
-EMBED_DIM = 64  # Increased from 32 to capture more nuance
-EPOCHS = 12  # Increased to force convergence
-BATCH_SIZE = 64  # Smaller batch size = more updates per epoch
+EMBED_DIM = 32
+EPOCHS = 4
+BATCH_SIZE = 128
 
 
 def train():
@@ -125,7 +125,10 @@ def train():
     # --- STEP 4: DEEPER ARCHITECTURE ---
     print("Building Deep CNN-LSTM...")
     model = Sequential()
-    model.add(Embedding(vocab_size, EMBED_DIM, input_length=MAX_LEN))
+    model.add(Embedding(vocab_size, EMBED_DIM))
+    model.add(
+        tf.keras.layers.SpatialDropout1D(0.2)
+    )  # Prevents overfitting on specific characters
 
     # Conv Layer 1: Look for 2-char patterns (like 'rn')
     model.add(Conv1D(filters=128, kernel_size=2, activation="relu", padding="same"))

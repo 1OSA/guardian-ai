@@ -9,7 +9,6 @@ import {
   FaUser,
   FaBars,
   FaTimes,
-  FaShieldAlt,
   FaUsers,
   FaBrain,
   FaGamepad,
@@ -57,7 +56,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* logo */}
       <div className="px-5 pt-5.5 pb-4.5 border-b border-border-dim flex items-center justify-between">
         <div className="flex items-center gap-2.25">
-          <FaShieldAlt style={{ color: ACCENT, fontSize: 20, flexShrink: 0 }} />
+          <img
+            src="/favicon.svg"
+            alt="Guardian AI"
+            style={{ width: 20, height: 20, flexShrink: 0 }}
+          />
           <div className="text-[15px] font-bold text-text">Guardian AI</div>
         </div>
         {isMobile && (
