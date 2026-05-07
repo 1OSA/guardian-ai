@@ -334,10 +334,20 @@ func (srv *GuardianServer) runMigrations() error {
 		`CREATE INDEX IF NOT EXISTS idx_client_group_members_group_id ON client_group_members(group_id)`,
 	}
 
+	// Run base migrations
 	for _, migration := range migrations {
 		if _, err := srv.db.ExecContext(srv.ctx, migration); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
+	}
+
+	// Run incremental alterations (ignore "duplicate column" errors)
+	alterations := []string{
+		`ALTER TABLE service_schedules ADD COLUMN scope TEXT DEFAULT 'global'`,
+		`ALTER TABLE service_schedules ADD COLUMN scope_key TEXT DEFAULT ''`,
+	}
+	for _, alt := range alterations {
+		_, _ = srv.db.ExecContext(srv.ctx, alt)
 	}
 
 	return nil
@@ -431,7 +441,7 @@ func (srv *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 
 	srv.recordStats(func(s *ServerStats) { s.CacheMisses++ })
 
-	blocked, blockedReason, mlConfidence, err := srv.classifyDomain(domain)
+	blocked, blockedReason, mlConfidence, err := srv.classifyDomain(domain, clientIP)
 
 	if blocked {
 		srv.Logf(LogLevelDebug, logPrefixDNS, "BLOCKED %s (reason: %s)", domain, blockedReason)
@@ -473,7 +483,16 @@ func (srv *GuardianServer) handleDNSQuery(w dns.ResponseWriter, req *dns.Msg) {
 	w.WriteMsg(resp)
 }
 
-func (srv *GuardianServer) classifyDomain(domain string) (bool, string, float32, error) {
+func (srv *GuardianServer) classifyDomain(domain, clientIP string) (bool, string, float32, error) {
+	// Custom rules check
+	blockedByRule, allowedByRule, ruleReason := srv.checkCustomRules(domain, clientIP)
+	if allowedByRule {
+		return false, "", 0, nil
+	}
+	if blockedByRule {
+		return true, ruleReason, 0, nil
+	}
+
 	srv.blocklistMu.RLock()
 	if _, blocked := srv.blocklist[domain]; blocked {
 		srv.blocklistMu.RUnlock()
@@ -503,6 +522,71 @@ func (srv *GuardianServer) classifyDomain(domain string) (bool, string, float32,
 	}
 
 	return false, "", 0, nil
+}
+
+func (srv *GuardianServer) checkCustomRules(domain, clientIP string) (bool, bool, string) {
+	var groupIDs []int
+	if clientIP != "" {
+		srv.dbMu.RLock()
+		rows, err := srv.db.QueryContext(srv.ctx, "SELECT group_id FROM client_group_members WHERE client_ip = ?", clientIP)
+		if err == nil {
+			for rows.Next() {
+				var id int
+				if rows.Scan(&id) == nil {
+					groupIDs = append(groupIDs, id)
+				}
+			}
+			rows.Close()
+		}
+		srv.dbMu.RUnlock()
+	}
+
+	// We check specific to general: client, then group, then global
+	keys := []string{}
+	if clientIP != "" {
+		keys = append(keys, "rules:client:"+clientIP)
+	}
+	for _, id := range groupIDs {
+		keys = append(keys, fmt.Sprintf("rules:group:%d", id))
+	}
+	keys = append(keys, "rules:global")
+
+	for _, key := range keys {
+		srv.dbMu.RLock()
+		var ruleStr string
+		err := srv.db.QueryRowContext(srv.ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&ruleStr)
+		srv.dbMu.RUnlock()
+
+		if err == nil && ruleStr != "" {
+			for _, line := range strings.Split(ruleStr, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "!") || strings.HasPrefix(line, "#") {
+					continue
+				}
+
+				// AdGuard/Adblock syntax handling
+				isException := strings.HasPrefix(line, "@@")
+				if isException {
+					line = strings.TrimPrefix(line, "@@")
+				}
+				line = strings.TrimPrefix(line, "||")
+				line = strings.TrimSuffix(line, "^")
+
+				if domain == line || strings.HasSuffix(domain, "."+line) {
+					if isException {
+						return false, true, "allowed_by_rule" // exception allows the domain
+					}
+					scope := strings.SplitN(key, ":", 2)
+					if len(scope) > 1 {
+						return true, false, "custom_rule:" + scope[1]
+					}
+					return true, false, "custom_rule"
+				}
+			}
+		}
+	}
+
+	return false, false, ""
 }
 
 func (srv *GuardianServer) classifyWithML(domain string) (bool, string, float32, error) {
@@ -2292,8 +2376,40 @@ func (srv *GuardianServer) handleTestDomain(w http.ResponseWriter, r *http.Reque
 
 	var checks []string
 
-	// Step 1: Check blocklist
-	checks = append(checks, "1. Checking blocklist...")
+	// Step 1: Check custom rules
+	checks = append(checks, "1. Checking custom rules...")
+	blockedByRule, allowedByRule, ruleReason := srv.checkCustomRules(domain, clientIP)
+	if allowedByRule {
+		checks = append(checks, "   ✓ Custom rule matched (allow exception)")
+		checks = append(checks, "✓ Domain allowed by custom rule")
+		srv.httpJSON(w, map[string]interface{}{
+			"domain":     domain,
+			"client_ip":  clientIP,
+			"blocked":    false,
+			"reason":     "",
+			"category":   "",
+			"confidence": 0,
+			"checks":     checks,
+		}, http.StatusOK)
+		return
+	} else if blockedByRule {
+		checks = append(checks, "   ✓ Custom rule matched (block)")
+		srv.httpJSON(w, map[string]interface{}{
+			"domain":     domain,
+			"client_ip":  clientIP,
+			"blocked":    true,
+			"reason":     ruleReason,
+			"category":   "custom_rule",
+			"confidence": 0,
+			"checks":     checks,
+		}, http.StatusOK)
+		return
+	} else {
+		checks = append(checks, "   - No custom rules matched")
+	}
+
+	// Step 2: Check blocklist
+	checks = append(checks, "2. Checking blocklist...")
 	srv.blocklistMu.RLock()
 	_, inBlocklist := srv.blocklist[domain]
 	srv.blocklistMu.RUnlock()
@@ -2313,8 +2429,8 @@ func (srv *GuardianServer) handleTestDomain(w http.ResponseWriter, r *http.Reque
 	}
 	checks = append(checks, "   - Not in blocklist")
 
-	// Step 2: Check ML classification
-	checks = append(checks, "2. Running ML classification...")
+	// Step 3: Check ML classification
+	checks = append(checks, "3. Running ML classification...")
 	if srv.mlClient == nil {
 		checks = append(checks, "   - ML service unavailable")
 	} else {
@@ -2347,10 +2463,6 @@ func (srv *GuardianServer) handleTestDomain(w http.ResponseWriter, r *http.Reque
 			checks = append(checks, fmt.Sprintf("   - ML classified as safe (%.0f%% confidence)", confidence*100))
 		}
 	}
-
-	// Step 3: Check custom rules
-	checks = append(checks, "3. Checking custom rules...")
-	checks = append(checks, "   - No custom rules matched")
 
 	checks = append(checks, "✓ Domain allowed")
 	srv.httpJSON(w, map[string]interface{}{
@@ -2389,9 +2501,71 @@ func (srv *GuardianServer) handleGetServices(w http.ResponseWriter, r *http.Requ
 	}
 
 	scope := r.URL.Query().Get("scope")
-	_ = scope // scope parameter for filtering
+	if scope == "" {
+		scope = "global"
+	}
+	scopeKey := r.URL.Query().Get("key")
+	merged := r.URL.Query().Get("merged") == "1"
 
-	srv.httpJSON(w, config.PredefinedServices, http.StatusOK)
+	srv.dbMu.RLock()
+	defer srv.dbMu.RUnlock()
+
+	// If merged=1, we return global AND scope-specific. Otherwise just the specific scope.
+	var query string
+	var args []interface{}
+
+	if merged && scope != "global" {
+		query = `
+			SELECT service_id, enabled, day_of_week, start_hour, end_hour, scope
+			FROM service_schedules
+			WHERE scope = 'global' OR (scope = ? AND scope_key = ?)
+		`
+		args = []interface{}{scope, scopeKey}
+	} else {
+		query = `
+			SELECT service_id, enabled, day_of_week, start_hour, end_hour, scope
+			FROM service_schedules
+			WHERE scope = ? AND scope_key = ?
+		`
+		args = []interface{}{scope, scopeKey}
+	}
+
+	rows, err := srv.db.QueryContext(srv.ctx, query, args...)
+	if err != nil {
+		srv.httpError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	// For merged, scope-specific wins over global.
+	schedules := make(map[string]map[string]interface{})
+	for rows.Next() {
+		var serviceID string
+		var enabled bool
+		var dayOfWeek, startHour, endHour sql.NullInt64
+		var rowScope string
+
+		if err := rows.Scan(&serviceID, &enabled, &dayOfWeek, &startHour, &endHour, &rowScope); err != nil {
+			continue
+		}
+
+		// If it's already in the map and it's a global row, skip it (because specific scope wins).
+		if existing, ok := schedules[serviceID]; ok {
+			if rowScope == "global" && existing["source"] != "global" {
+				continue
+			}
+		}
+
+		schedules[serviceID] = map[string]interface{}{
+			"enabled":      enabled,
+			"days_of_week": "",
+			"time_start":   "",
+			"time_end":     "",
+			"source":       rowScope,
+		}
+	}
+
+	srv.httpJSON(w, schedules, http.StatusOK)
 }
 
 func (srv *GuardianServer) handleCreateService(w http.ResponseWriter, r *http.Request) {
@@ -2400,7 +2574,13 @@ func (srv *GuardianServer) handleCreateService(w http.ResponseWriter, r *http.Re
 	}
 
 	var req struct {
-		Name string `json:"name"`
+		Scope      string `json:"scope"`
+		ScopeKey   string `json:"scope_key"`
+		ServiceID  string `json:"service_id"`
+		Enabled    bool   `json:"enabled"`
+		DaysOfWeek string `json:"days_of_week"`
+		TimeStart  string `json:"time_start"`
+		TimeEnd    string `json:"time_end"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2408,9 +2588,34 @@ func (srv *GuardianServer) handleCreateService(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	id := randomID()
-	srv.Logf(LogLevelInfo, logPrefixHTTP, "created service %s (%s)", id, req.Name)
-	srv.httpJSON(w, map[string]string{"id": id}, http.StatusCreated)
+	if req.Scope == "" {
+		req.Scope = "global"
+	}
+
+	// Composite ID for conflict resolution
+	id := req.Scope + ":" + req.ScopeKey + ":" + req.ServiceID
+
+	srv.dbMu.Lock()
+	defer srv.dbMu.Unlock()
+
+	_, err := srv.db.ExecContext(srv.ctx, `
+		INSERT INTO service_schedules (id, service_id, enabled, scope, scope_key)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled, created_at=CURRENT_TIMESTAMP
+	`, id, req.ServiceID, req.Enabled, req.Scope, req.ScopeKey)
+
+	if err != nil {
+		srv.Logf(LogLevelError, logPrefixHTTP, "failed to save service: %v", err)
+		srv.httpError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+
+	srv.svcScheduleCacheMu.Lock()
+	delete(srv.svcScheduleCache, req.ServiceID)
+	srv.svcScheduleCacheMu.Unlock()
+
+	srv.Logf(LogLevelInfo, logPrefixHTTP, "updated service schedule for %s", req.ServiceID)
+	srv.httpStatus(w, http.StatusOK)
 }
 
 func (srv *GuardianServer) handleDeleteService(w http.ResponseWriter, r *http.Request) {
@@ -2418,13 +2623,50 @@ func (srv *GuardianServer) handleDeleteService(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	id := r.URL.Query().Get("id")
-	if id == "" {
+	var req struct {
+		Scope     string `json:"scope"`
+		ScopeKey  string `json:"scope_key"`
+		ServiceID string `json:"service_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req.ServiceID = r.URL.Query().Get("id")
+		if req.ServiceID == "" {
+			req.ServiceID = r.URL.Query().Get("service_id")
+		}
+		req.Scope = r.URL.Query().Get("scope")
+		req.ScopeKey = r.URL.Query().Get("scope_key")
+	}
+
+	if req.Scope == "" {
+		req.Scope = "global"
+	}
+
+	if req.ServiceID == "" {
 		srv.httpError(w, "missing service id", http.StatusBadRequest)
 		return
 	}
 
-	srv.Logf(LogLevelInfo, logPrefixHTTP, "deleted service %s", id)
+	id := req.Scope + ":" + req.ScopeKey + ":" + req.ServiceID
+
+	srv.dbMu.Lock()
+	defer srv.dbMu.Unlock()
+
+	_, err := srv.db.ExecContext(srv.ctx, `
+		DELETE FROM service_schedules WHERE id = ?
+	`, id)
+
+	if err != nil {
+		srv.Logf(LogLevelError, logPrefixHTTP, "failed to delete service schedule: %v", err)
+		srv.httpError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+
+	srv.svcScheduleCacheMu.Lock()
+	delete(srv.svcScheduleCache, req.ServiceID)
+	srv.svcScheduleCacheMu.Unlock()
+
+	srv.Logf(LogLevelInfo, logPrefixHTTP, "deleted service schedule for %s", req.ServiceID)
 	srv.httpStatus(w, http.StatusOK)
 }
 
@@ -2442,50 +2684,25 @@ func (srv *GuardianServer) handleGetRules(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	scope := r.URL.Query().Get("scope")
+	scopeKey := r.URL.Query().Get("key")
+
+	key := "rules:global"
+	if scope != "" && scope != "global" && scopeKey != "" {
+		key = "rules:" + scope + ":" + scopeKey
+	}
+
 	srv.dbMu.RLock()
 	defer srv.dbMu.RUnlock()
 
-	rows, err := srv.db.QueryContext(r.Context(), `
-		SELECT id, name, condition_type, condition_value, action, priority, enabled, created_at
-		FROM rules ORDER BY priority DESC
-	`)
-	if err != nil {
-		srv.httpError(w, "failed to query rules", http.StatusInternalServerError)
+	var rules string
+	err := srv.db.QueryRowContext(srv.ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&rules)
+	if err != nil && err != sql.ErrNoRows {
+		srv.httpError(w, "database error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
-	rules := []map[string]interface{}{}
-	for rows.Next() {
-		var id, name, conditionType, conditionValue, action string
-		var priority int
-		var enabled bool
-		var createdAt sql.NullInt64
-		createdAtStr := ""
-
-		if err := rows.Scan(&id, &name, &conditionType, &conditionValue, &action, &priority, &enabled, &createdAt); err != nil {
-			continue
-		}
-
-		if createdAt.Valid {
-			createdAtStr = time.Unix(createdAt.Int64, 0).Format(time.RFC3339)
-		} else {
-			createdAtStr = time.Now().Format(time.RFC3339)
-		}
-
-		rules = append(rules, map[string]interface{}{
-			"id":              id,
-			"name":            name,
-			"condition_type":  conditionType,
-			"condition_value": conditionValue,
-			"action":          action,
-			"priority":        priority,
-			"enabled":         enabled,
-			"created_at":      createdAtStr,
-		})
-	}
-
-	srv.httpJSON(w, rules, http.StatusOK)
+	srv.httpJSON(w, map[string]string{"rules": rules}, http.StatusOK)
 }
 
 func (srv *GuardianServer) handleCreateRule(w http.ResponseWriter, r *http.Request) {
@@ -2494,37 +2711,47 @@ func (srv *GuardianServer) handleCreateRule(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req struct {
-		Name           string `json:"name"`
-		ConditionType  string `json:"condition_type"`
-		ConditionValue string `json:"condition_value"`
-		Action         string `json:"action"`
-		Priority       int    `json:"priority"`
-		Enabled        bool   `json:"enabled"`
+		Scope    string `json:"scope_type"`
+		ScopeKey string `json:"scope_key"`
+		Rules    string `json:"rules"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		srv.httpError(w, "failed to read body", http.StatusBadRequest)
+		return
+	}
+
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		srv.httpError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	id := randomID()
-	now := time.Now().Unix()
+	// Fallback for settings page which just sends {"rules": "..."}
+	if req.Scope == "" {
+		req.Scope = "global"
+	}
+
+	key := "rules:global"
+	if req.Scope != "global" && req.ScopeKey != "" {
+		key = "rules:" + req.Scope + ":" + req.ScopeKey
+	}
 
 	srv.dbMu.Lock()
 	defer srv.dbMu.Unlock()
 
-	_, err := srv.db.ExecContext(r.Context(), `
-		INSERT INTO rules (id, name, condition_type, condition_value, action, priority, enabled, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, req.Name, req.ConditionType, req.ConditionValue, req.Action, req.Priority, req.Enabled, now)
+	_, err = srv.db.ExecContext(srv.ctx, `
+		INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+	`, key, req.Rules)
 
 	if err != nil {
-		srv.httpError(w, "failed to create rule", http.StatusInternalServerError)
+		srv.httpError(w, "failed to save rules", http.StatusInternalServerError)
 		return
 	}
 
-	srv.Logf(LogLevelInfo, logPrefixHTTP, "created rule %s (%s)", id, req.Name)
-	srv.httpJSON(w, map[string]string{"id": id}, http.StatusCreated)
+	srv.Logf(LogLevelInfo, logPrefixHTTP, "updated rules for %s", key)
+	srv.httpStatus(w, http.StatusCreated)
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -2651,7 +2878,22 @@ func (srv *GuardianServer) handleDeleteGroup(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	var req struct {
+		ID interface{} `json:"id"`
+	}
+
 	groupID := r.URL.Query().Get("id")
+	if groupID == "" {
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			switch v := req.ID.(type) {
+			case string:
+				groupID = v
+			case float64:
+				groupID = fmt.Sprintf("%.0f", v)
+			}
+		}
+	}
+
 	if groupID == "" {
 		srv.httpError(w, "missing group id", http.StatusBadRequest)
 		return
@@ -2676,14 +2918,22 @@ func (srv *GuardianServer) handleAddGroupMember(w http.ResponseWriter, r *http.R
 	}
 
 	var req struct {
-		GroupID    string `json:"group_id"`
-		Identifier string `json:"identifier"`
-		Type       string `json:"type"`
+		GroupID    interface{} `json:"group_id"`
+		Identifier string      `json:"identifier"`
+		Type       string      `json:"type"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		srv.httpError(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	var reqGroupID string
+	switch v := req.GroupID.(type) {
+	case string:
+		reqGroupID = v
+	case float64:
+		reqGroupID = fmt.Sprintf("%.0f", v)
 	}
 
 	srv.dbMu.Lock()
@@ -2693,7 +2943,7 @@ func (srv *GuardianServer) handleAddGroupMember(w http.ResponseWriter, r *http.R
 	var groupID string
 	err := srv.db.QueryRowContext(r.Context(), `
 		SELECT id FROM client_groups WHERE id = ? LIMIT 1
-	`, req.GroupID).Scan(&groupID)
+	`, reqGroupID).Scan(&groupID)
 	if err != nil {
 		srv.httpError(w, "group not found", http.StatusBadRequest)
 		return
@@ -2702,14 +2952,14 @@ func (srv *GuardianServer) handleAddGroupMember(w http.ResponseWriter, r *http.R
 	_, err = srv.db.ExecContext(r.Context(), `
 		INSERT INTO client_group_members (id, group_id, client_ip, added_at)
 		VALUES (?, ?, ?, ?)
-	`, randomID(), req.GroupID, req.Identifier, time.Now().Unix())
+	`, randomID(), reqGroupID, req.Identifier, time.Now().Unix())
 
 	if err != nil {
 		srv.httpError(w, "failed to add member", http.StatusInternalServerError)
 		return
 	}
 
-	srv.Logf(LogLevelInfo, logPrefixHTTP, "added member %s to group %s", req.Identifier, req.GroupID)
+	srv.Logf(LogLevelInfo, logPrefixHTTP, "added member %s to group %s", req.Identifier, reqGroupID)
 	srv.httpJSON(w, map[string]string{"status": "ok"}, http.StatusOK)
 }
 
@@ -2719,8 +2969,8 @@ func (srv *GuardianServer) handleRemoveGroupMember(w http.ResponseWriter, r *htt
 	}
 
 	var req struct {
-		GroupID    string `json:"group_id"`
-		Identifier string `json:"identifier"`
+		GroupID    interface{} `json:"group_id"`
+		Identifier string      `json:"identifier"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2728,19 +2978,27 @@ func (srv *GuardianServer) handleRemoveGroupMember(w http.ResponseWriter, r *htt
 		return
 	}
 
+	var groupID string
+	switch v := req.GroupID.(type) {
+	case string:
+		groupID = v
+	case float64:
+		groupID = fmt.Sprintf("%.0f", v)
+	}
+
 	srv.dbMu.Lock()
 	defer srv.dbMu.Unlock()
 
 	_, err := srv.db.ExecContext(r.Context(), `
 		DELETE FROM client_group_members WHERE group_id = ? AND client_ip = ?
-	`, req.GroupID, req.Identifier)
+	`, groupID, req.Identifier)
 
 	if err != nil {
 		srv.httpError(w, "failed to remove member", http.StatusInternalServerError)
 		return
 	}
 
-	srv.Logf(LogLevelInfo, logPrefixHTTP, "removed member %s from group %s", req.Identifier, req.GroupID)
+	srv.Logf(LogLevelInfo, logPrefixHTTP, "removed member %s from group %s", req.Identifier, groupID)
 	srv.httpJSON(w, map[string]string{"status": "ok"}, http.StatusOK)
 }
 
@@ -3202,6 +3460,8 @@ func IsTermux() bool {
 type ServiceSchedule struct {
 	ID        string
 	ServiceID string
+	Scope     string
+	ScopeKey  string
 	DayOfWeek int
 	StartHour int
 	EndHour   int
@@ -3220,7 +3480,7 @@ func (srv *GuardianServer) getServiceSchedules(serviceID string) ([]ServiceSched
 	defer srv.dbMu.RUnlock()
 
 	rows, err := srv.db.QueryContext(srv.ctx, `
-		SELECT id, service_id, day_of_week, start_hour, end_hour, enabled
+		SELECT id, service_id, scope, scope_key, day_of_week, start_hour, end_hour, enabled
 		FROM service_schedules WHERE service_id = ?
 	`, serviceID)
 
@@ -3232,8 +3492,25 @@ func (srv *GuardianServer) getServiceSchedules(serviceID string) ([]ServiceSched
 	schedules := []ServiceSchedule{}
 	for rows.Next() {
 		var s ServiceSchedule
-		if err := rows.Scan(&s.ID, &s.ServiceID, &s.DayOfWeek, &s.StartHour, &s.EndHour, &s.Enabled); err != nil {
+		var dayOfWeek, startHour, endHour sql.NullInt64
+		var scope, scopeKey sql.NullString
+		if err := rows.Scan(&s.ID, &s.ServiceID, &scope, &scopeKey, &dayOfWeek, &startHour, &endHour, &s.Enabled); err != nil {
 			continue
+		}
+		if scope.Valid {
+			s.Scope = scope.String
+		}
+		if scopeKey.Valid {
+			s.ScopeKey = scopeKey.String
+		}
+		if dayOfWeek.Valid {
+			s.DayOfWeek = int(dayOfWeek.Int64)
+		}
+		if startHour.Valid {
+			s.StartHour = int(startHour.Int64)
+		}
+		if endHour.Valid {
+			s.EndHour = int(endHour.Int64)
 		}
 		schedules = append(schedules, s)
 	}

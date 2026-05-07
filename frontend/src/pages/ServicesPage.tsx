@@ -40,7 +40,14 @@ const ServicesPage: React.FC = () => {
       time_start: "",
       time_end: "",
     };
-    const next: ServiceSchedule = { ...current, ...patch };
+
+    // Explicit boolean casting to prevent API misinterpretation
+    const next: ServiceSchedule = {
+      ...current,
+      ...patch,
+      enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled
+    };
+
     setSaving(svcId);
     try {
       await axios.post("/api/services", {
