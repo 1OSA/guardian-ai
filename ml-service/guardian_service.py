@@ -30,14 +30,17 @@ logger = logging.getLogger(__name__)
 
 class GuardianAI(guardian_pb2_grpc.GuardianAIServicer):
     # Category index mapping
+    # IMPORTANT: keep this mapping in sync with how the model was trained.
+    # The training script used indices: 0=Safe, 1=DGA, 2=Phishing (see train_model.py labels list).
+    # Map numeric indices to category names returned to the server.
     CATEGORY_MAP = {
-        0: "phishing",
-        1: "malware",
-        2: "dga",
-        3: "other",
+        0: "safe",
+        1: "dga",
+        2: "phishing",
+        "safe": "safe",
         "phishing": "phishing",
-        "malware": "malware",
         "dga": "dga",
+        "malware": "malware",
         "other": "other",
     }
 
@@ -127,12 +130,22 @@ class GuardianAI(guardian_pb2_grpc.GuardianAIServicer):
 
                 if len(probs) >= 3:
                     # Get the category with highest probability
-                    category_idx = np.argmax(probs)
+                    category_idx = int(np.argmax(probs))
                     confidence = float(probs[category_idx])
 
                     # Map category index to name
                     category = self.CATEGORY_MAP.get(category_idx, "unknown")
-                    is_malicious = confidence > 0.5
+
+                    # Safe class should never be treated as malicious, regardless of confidence
+                    if category == "safe":
+                        is_malicious = False
+                    else:
+                        is_malicious = confidence > 0.5
+
+                    # Log raw probabilities for debugging (helps detect label-order mismatches)
+                    logger.debug(
+                        f"Model probs: {probs.tolist()} -> idx={category_idx} ({category}) confidence={confidence:.4f}"
+                    )
                 else:
                     # Fallback if fewer than 3 probabilities
                     is_malicious = bool(float(probs[0]) > 0.5)

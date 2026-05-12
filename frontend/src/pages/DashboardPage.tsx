@@ -11,7 +11,11 @@ import {
   POLL_QUERIES_LIVE_MS,
   POLL_RELATIVE_TIME_MS,
 } from "../lib/constants";
-import { reasonBadgeColor } from "../lib/utils";
+import {
+  normalizeBlockReason,
+  reasonBadgeColor,
+  reasonLabel,
+} from "../lib/utils";
 import QueryTable from "../components/QueryTable";
 import type { QueryRow } from "../lib/types";
 
@@ -22,8 +26,8 @@ const StatCard: React.FC<{
   value: string;
   valueColor?: string;
   sub: string;
-}> = ({ label, value, valueColor = "#e0e0e0", sub }) => (
-  <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] px-5 py-4">
+}> = ({ label, value, valueColor = "var(--color-text)", sub }) => (
+  <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card px-5 py-4">
     <div className="text-[11px] font-semibold text-text-ghost uppercase tracking-[0.05em] mb-1.5">
       {label}
     </div>
@@ -38,7 +42,7 @@ const StatCard: React.FC<{
 );
 
 const ListHeader: React.FC<{ title: string }> = ({ title }) => (
-  <div className="px-4 pt-3.5 pb-2.5 text-[12px] font-bold text-[#777] uppercase tracking-[0.05em] border-b border-border">
+  <div className="px-4 pt-3.5 pb-2.5 text-[12px] font-bold text-text-faint uppercase tracking-[0.05em] border-b border-border">
     {title}
   </div>
 );
@@ -127,6 +131,17 @@ const DashboardPage: React.FC = () => {
   const total24h = stats?.total_24h ?? 0;
   const blocked24h = stats?.blocked_24h ?? 0;
 
+  const groupedBlockReasons = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of stats?.block_reasons ?? []) {
+      const key = normalizeBlockReason(row.reason) || "unknown";
+      counts.set(key, (counts.get(key) ?? 0) + row.count);
+    }
+    return Array.from(counts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [stats?.block_reasons]);
+
   const pieData = [
     { name: "Allowed", value: allowed, color: "#4a7a4a" },
     { name: "Blocked", value: blocked, color: "#8b3030" },
@@ -153,16 +168,26 @@ const DashboardPage: React.FC = () => {
           <span
             className="flex items-center gap-1.25 text-[11px] font-semibold px-2.5 py-0.75 rounded-full border"
             style={{
-              background: stats?.ml_connected ? "#1a2a1a" : "#1e1414",
-              color: stats?.ml_connected ? "#6a9e6a" : "#8a4a4a",
-              borderColor: stats?.ml_connected ? "#2a4a2a" : "#4a2a2a",
+              background: stats?.ml_connected
+                ? "var(--color-success-dim)"
+                : "var(--color-danger-dim)",
+              color: stats?.ml_connected
+                ? "var(--color-success)"
+                : "var(--color-danger)",
+              borderColor: stats?.ml_connected
+                ? "var(--color-success-border)"
+                : "var(--color-danger-border)",
             }}
           >
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
               style={{
-                background: stats?.ml_connected ? "#6a9e6a" : "#8a4a4a",
-                boxShadow: stats?.ml_connected ? "0 0 5px #6a9e6a" : "none",
+                background: stats?.ml_connected
+                  ? "var(--color-success)"
+                  : "var(--color-danger)",
+                boxShadow: stats?.ml_connected
+                  ? "0 0 5px var(--color-success)"
+                  : "none",
               }}
             />
             ML {stats?.ml_connected ? "Connected" : "Offline"}
@@ -192,19 +217,21 @@ const DashboardPage: React.FC = () => {
         <StatCard
           label="Allowed"
           value={allowed.toLocaleString()}
-          valueColor="#6a9e6a"
+          valueColor="var(--color-success)"
           sub={`${total24h > 0 ? (total24h - blocked24h).toLocaleString() : "0"} in last 24h`}
         />
         <StatCard
           label="Blocked"
           value={blocked.toLocaleString()}
-          valueColor="#c0392b"
+          valueColor="var(--color-danger)"
           sub={`${blocked24h.toLocaleString()} in last 24h`}
         />
         <StatCard
           label="Block Rate"
           value={`${blockRate.toFixed(1)}%`}
-          valueColor={blockRate > 20 ? "#e07050" : "#e0e0e0"}
+          valueColor={
+            blockRate > 20 ? "var(--color-warn)" : "var(--color-text)"
+          }
           sub={`${mlBlocked.toLocaleString()} blocked by ML`}
         />
       </div>
@@ -216,8 +243,8 @@ const DashboardPage: React.FC = () => {
         }`}
       >
         {/* donut chart */}
-        <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] px-5 py-4">
-          <div className="text-[12px] font-bold text-[#777] uppercase tracking-[0.05em] mb-3">
+        <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card px-5 py-4">
+          <div className="text-[12px] font-bold text-text-faint uppercase tracking-[0.05em] mb-3">
             Traffic Split
           </div>
           <ResponsiveContainer width="100%" height={160}>
@@ -239,12 +266,12 @@ const DashboardPage: React.FC = () => {
               </Pie>
               <Tooltip
                 contentStyle={{
-                  background: "#1a1a1a",
-                  border: "1px solid #333",
+                  background: "var(--color-surface-1)",
+                  border: "1px solid var(--color-border-mid)",
                   borderRadius: 6,
                   fontSize: 12,
                 }}
-                itemStyle={{ color: "#ccc" }}
+                itemStyle={{ color: "var(--color-text-dim)" }}
                 formatter={(v) => [Number(v as number).toLocaleString(), ""]}
               />
             </PieChart>
@@ -266,7 +293,7 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* top queried domains */}
-        <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden">
+        <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card overflow-hidden">
           <ListHeader title="Top Queried Domains" />
           {(stats?.top_domains ?? []).slice(0, 8).map((d, i) => {
             const pct = stats?.top_domains?.[0]?.count
@@ -284,7 +311,7 @@ const DashboardPage: React.FC = () => {
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-mono text-[#7aab78] overflow-hidden text-ellipsis whitespace-nowrap">
+                  <div className="text-[12px] font-mono text-accent overflow-hidden text-ellipsis whitespace-nowrap">
                     {d.domain}
                   </div>
                   <div className="h-0.75 rounded-xs bg-border mt-1 overflow-hidden">
@@ -310,7 +337,7 @@ const DashboardPage: React.FC = () => {
         {/* top blocked + category breakdown */}
         <div className="flex flex-col gap-3">
           {/* top blocked */}
-          <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden">
+          <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card overflow-hidden">
             <ListHeader title="Top Blocked" />
             {(stats?.top_blocked ?? []).slice(0, 5).map((d, i) => (
               <div
@@ -325,7 +352,7 @@ const DashboardPage: React.FC = () => {
                 <span className="text-[11px] text-text-dead w-4 text-right shrink-0">
                   {i + 1}
                 </span>
-                <span className="flex-1 text-[12px] font-mono text-[#e07070] overflow-hidden text-ellipsis whitespace-nowrap min-w-0 underline decoration-[#5a2a2a] underline-offset-2">
+                <span className="flex-1 text-[12px] font-mono text-danger overflow-hidden text-ellipsis whitespace-nowrap min-w-0 underline decoration-danger-border underline-offset-2">
                   {d.domain}
                 </span>
                 <span className="text-[12px] text-text-faint shrink-0 tabular-nums">
@@ -341,13 +368,13 @@ const DashboardPage: React.FC = () => {
           </div>
 
           {/* block reasons */}
-          <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden">
+          <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card overflow-hidden">
             <ListHeader title="Block Reasons" />
-            {(stats?.block_reasons ?? []).map((b) => {
-              const colors = reasonBadgeColor(b.reason) ?? {
-                bg: "#1e2a1e",
-                fg: "#80b080",
-                border: "#2a4a2a",
+            {groupedBlockReasons.map((b) => {
+              const colors = reasonBadgeColor(b.reason, b.reason) ?? {
+                bg: "var(--color-success-dim)",
+                fg: "var(--color-success-text)",
+                border: "var(--color-success-border)",
               };
               const { fg: color, bg } = colors;
               return (
@@ -363,7 +390,7 @@ const DashboardPage: React.FC = () => {
                       border: `1px solid ${colors.border}`,
                     }}
                   >
-                    {b.reason}
+                    {reasonLabel(b.reason, b.reason) ?? b.reason}
                   </span>
                   <span className="text-[12px] text-text-faint tabular-nums">
                     {b.count.toLocaleString()}
@@ -371,7 +398,7 @@ const DashboardPage: React.FC = () => {
                 </div>
               );
             })}
-            {(stats?.block_reasons ?? []).length === 0 && (
+            {groupedBlockReasons.length === 0 && (
               <div className="p-4 text-center text-text-dead text-[13px]">
                 No blocks yet
               </div>
@@ -381,15 +408,15 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {/* ── recent queries ── */}
-      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden">
+      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card overflow-hidden">
         <div className="px-5 pt-3.5 pb-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-bold text-[#777] uppercase tracking-[0.05em]">
+            <span className="text-[12px] font-bold text-text-faint uppercase tracking-[0.05em]">
               Recent Queries
             </span>
             <span
               title="Auto-refreshes every 3 seconds"
-              className="inline-flex items-center gap-1 text-[11px] text-[#4a6a4a]"
+              className="inline-flex items-center gap-1 text-[11px] text-success"
             >
               <span
                 className="w-1.5 h-1.5 rounded-full inline-block shrink-0"

@@ -13,6 +13,7 @@ import {
   FaBrain,
   FaGamepad,
 } from "react-icons/fa";
+import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../lib/AuthContext";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { ACCENT, SIDEBAR_W } from "../lib/constants";
@@ -84,15 +85,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               onClick={() => isMobile && closeSidebar()}
               className="flex items-center gap-2.75 px-3 py-2.5 mb-0.5 rounded-lg no-underline text-[13px] transition-[background,color] duration-150 box-border"
               style={{
-                color: active ? "#fff" : "#666",
-                background: active ? "#1e1e1e" : "transparent",
+                color: active ? "var(--color-text)" : "var(--color-text-faint)",
+                background: active ? "var(--color-surface-1)" : "transparent",
                 borderLeft: `3px solid ${active ? ACCENT : "transparent"}`,
                 fontWeight: active ? 600 : 400,
               }}
             >
               <span
                 className="text-[15px] shrink-0 transition-colors duration-150"
-                style={{ color: active ? ACCENT : "#444" }}
+                style={{ color: active ? ACCENT : "var(--color-text-ghost)" }}
               >
                 {item.icon}
               </span>
@@ -102,10 +103,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         })}
       </nav>
 
-      {/* bottom: user + logout */}
+      {/* bottom: theme + version + user + logout */}
       <div className="border-t border-border-dim px-2.5 py-3">
+        {/* theme toggle + version */}
+        <div className="flex items-center justify-between gap-2 px-1 mb-2">
+          <ThemeToggle />
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-surface-1 text-text-dead border border-border tracking-[0.05em]">
+            v{appVersion}
+          </span>
+        </div>
+
         {/* user chip */}
-        <div className="flex items-center gap-2.25 px-3 py-2 rounded-lg bg-[#161616] border border-border mb-1.5">
+        <div className="flex items-center gap-2.25 px-3 py-2 rounded-lg bg-surface-1 border border-border mb-1.5">
           <div
             className="w-7 h-7 rounded-full bg-accent-dim flex items-center justify-center shrink-0"
             style={{ border: `1px solid ${ACCENT}44` }}
@@ -123,7 +132,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         {/* logout */}
         <button
           onClick={logout}
-          className="flex items-center gap-2.5 w-full px-3 py-2.25 bg-transparent border border-border-dim rounded-lg text-text-ghost cursor-pointer text-[13px] font-medium transition-[background,color,border-color] duration-150 box-border hover:bg-[#2a1010] hover:text-[#e07070] hover:border-[#4a2020]"
+          className="flex items-center gap-2.5 w-full px-3 py-2.25 bg-transparent border border-border-dim rounded-lg text-text-ghost cursor-pointer text-[13px] font-medium transition-[background,color,border-color] duration-150 box-border hover:bg-danger-dim hover:text-danger hover:border-danger-border"
         >
           <FaSignOutAlt className="text-sm shrink-0" />
           Sign Out
@@ -133,7 +142,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   );
 
   return (
-    <div className="flex h-screen bg-surface text-white overflow-hidden">
+    <div className="flex h-screen bg-surface text-text overflow-hidden">
       {/* mobile overlay */}
       {isMobile && sidebarOpen && (
         <div
@@ -156,25 +165,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
       {/* main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* topbar */}
-        <div className="h-13 border-b border-border-dim bg-surface-2 flex items-center px-5 gap-3 shrink-0">
-          {isMobile && (
+        {/* mobile-only topbar (hamburger to open sidebar) */}
+        {isMobile && (
+          <div className="h-13 border-b border-border-dim bg-surface-2 flex items-center px-5 gap-3 shrink-0">
             <button
               onClick={() => setSidebarOpen(true)}
               className="bg-transparent border-none text-text-muted text-lg cursor-pointer p-1 flex items-center"
             >
               <FaBars />
             </button>
-          )}
-          <span className="text-[15px] font-semibold text-text-dim">
-            {navItems.find((item) => item.path === location.pathname)?.label ??
-              "Guardian AI"}
-          </span>
-          <div className="flex-1" />
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-surface-1 text-text-dead border border-border tracking-[0.05em]">
-            v{appVersion}
-          </span>
-        </div>
+          </div>
+        )}
 
         {/* page content */}
         <div className="flex-1 overflow-y-auto">{children}</div>

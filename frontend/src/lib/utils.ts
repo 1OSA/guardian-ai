@@ -31,7 +31,13 @@ export function reasonBadgeColor(
 ): ReasonColors | null {
   const c = cat.toLowerCase();
   const r = (reason ?? "").toLowerCase();
-  const isServiceBlock = c === "service-block" || r === "service-block";
+  const isServiceBlock =
+    c === "service-block" ||
+    r === "service-block" ||
+    c === "service" ||
+    r === "service" ||
+    c.startsWith("service:") ||
+    r.startsWith("service:");
   const isClientBlock =
     c === "client-block" ||
     c === "client-blocked" ||
@@ -48,15 +54,32 @@ export function reasonBadgeColor(
   const isMalware = c.includes("malware") || r.startsWith("ml:malware");
   const isML = r.startsWith("ml:");
 
-  if (isServiceBlock)
-    return { bg: "#2a1a10", fg: "#e09060", border: "#6a3820" };
-  if (isClientBlock) return { bg: "#2a1a10", fg: "#e09060", border: "#6a3820" };
-  if (isClientAllow) return { bg: "#1a1f1a", fg: "#798777", border: "#3a4a3a" };
-  if (isBL) return { bg: "#2a1a2a", fg: "#c080c0", border: "#502050" };
-  if (isPhishing) return { bg: "#3a1a10", fg: "#e08060", border: "#6a3020" };
-  if (isDGA) return { bg: "#1a1a3a", fg: "#7080e0", border: "#303060" };
-  if (isMalware) return { bg: "#3a1010", fg: "#e07070", border: "#6a2020" };
-  if (isML) return { bg: "#1e2a1e", fg: "#80b080", border: "#2a4a2a" };
+  const v = (name: string) => `var(--color-reason-${name})`;
+  if (isServiceBlock || isClientBlock)
+    return { bg: v("block-bg"), fg: v("block-fg"), border: v("block-border") };
+  if (isClientAllow)
+    return { bg: v("allow-bg"), fg: v("allow-fg"), border: v("allow-border") };
+  if (isBL)
+    return {
+      bg: v("blocklist-bg"),
+      fg: v("blocklist-fg"),
+      border: v("blocklist-border"),
+    };
+  if (isPhishing)
+    return {
+      bg: v("phishing-bg"),
+      fg: v("phishing-fg"),
+      border: v("phishing-border"),
+    };
+  if (isDGA)
+    return { bg: v("dga-bg"), fg: v("dga-fg"), border: v("dga-border") };
+  if (isMalware)
+    return {
+      bg: v("malware-bg"),
+      fg: v("malware-fg"),
+      border: v("malware-border"),
+    };
+  if (isML) return { bg: v("ml-bg"), fg: v("ml-fg"), border: v("ml-border") };
   return null;
 }
 
@@ -219,6 +242,8 @@ export function reasonLabel(
     ["n/a", "allowed", "safe", "safe (low confidence)", "unknown"].includes(raw)
   )
     return null;
+  if (raw.startsWith("service:")) return "Service block";
+  if (raw === "service") return "Service block";
   if (raw === "service-block") return "Service block";
   if (raw === "group-blocked" || raw === "group-block") return "Group block";
   if (raw === "client-blocked" || raw === "client-block") return "Client block";
@@ -232,7 +257,23 @@ export function reasonLabel(
 }
 
 /** Returns the alternating row background colour for a query table row. */
+export function normalizeBlockReason(reason: string | undefined): string {
+  const raw = (reason ?? "").toLowerCase();
+  if (!raw) return "";
+  if (
+    raw.startsWith("service:") ||
+    raw === "service" ||
+    raw === "service-block"
+  ) {
+    return "service-block";
+  }
+  return raw;
+}
+
 export function rowBg(blocked: boolean, index: number): string {
-  if (blocked) return index % 2 === 0 ? "#1e1212" : "#1c1111";
-  return index % 2 === 0 ? "#1a1a1a" : "#171717";
+  if (blocked)
+    return index % 2 === 0
+      ? "var(--color-row-blocked)"
+      : "var(--color-row-blocked-alt)";
+  return index % 2 === 0 ? "var(--color-row)" : "var(--color-row-alt)";
 }

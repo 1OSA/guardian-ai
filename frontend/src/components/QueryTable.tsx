@@ -117,7 +117,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
                 {compact ? (
                   <>
                     <span
-                      className={`text-[12px] ${r.client_label ? "font-semibold text-[#7a9e88]" : "font-mono text-[#777]"}`}
+                      className={`text-[12px] ${r.client_label ? "font-semibold text-accent" : "font-mono text-text-muted"}`}
                     >
                       {r.client_label || r.client_ip}
                     </span>
@@ -136,7 +136,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
                         )
                       }
                       title="Edit client rules"
-                      className={`text-[12px] text-[#7a9e88] cursor-pointer underline decoration-[#7a9e8844] underline-offset-[3px] ${r.client_label ? "font-semibold" : "font-mono"}`}
+                      className={`text-[12px] text-accent cursor-pointer underline decoration-accent/30 underline-offset-[3px] ${r.client_label ? "font-semibold" : "font-mono"}`}
                     >
                       {r.client_label || r.client_ip}
                     </span>
@@ -152,14 +152,18 @@ const QueryTable: React.FC<QueryTableProps> = ({
               {/* domain */}
               <td
                 className="px-3 py-2 text-[13px] border-b border-border-dim align-middle font-mono break-all max-w-65"
-                style={{ color: r.blocked ? "#e07070" : "#e0e0e0" }}
+                style={{
+                  color: r.blocked
+                    ? "var(--color-danger)"
+                    : "var(--color-text)",
+                }}
               >
                 {r.domain}
               </td>
 
               {/* qtype badge */}
               <td className="px-3 py-2 text-[12px] border-b border-border-dim align-middle text-center">
-                <span className="text-[11px] font-bold px-1.75 py-0.5 rounded bg-border text-[#777] border border-[#2e2e2e] font-mono">
+                <span className="text-[11px] font-bold px-1.75 py-0.5 rounded bg-surface-2 text-text-muted border border-border-mid font-mono">
                   {qtypeLabel}
                 </span>
               </td>
@@ -168,7 +172,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
               <td className="px-3 py-2 text-[12px] border-b border-border-dim align-middle text-center">
                 {r.blocked ? (
                   <div className="inline-flex flex-col items-center gap-1">
-                    <span className="text-[11px] font-bold px-2.25 py-0.5 rounded-full bg-[#3a1010] text-[#e07070] border border-[#6a2020] whitespace-nowrap">
+                    <span className="text-[11px] font-bold px-2.25 py-0.5 rounded-full bg-danger-dim text-danger border border-danger-border whitespace-nowrap">
                       Blocked
                     </span>
                     {!compact && isML && confPct > 0 && (
@@ -180,10 +184,10 @@ const QueryTable: React.FC<QueryTableProps> = ({
                               width: `${confPct}%`,
                               background:
                                 confPct > 80
-                                  ? "#c0392b"
+                                  ? "var(--color-danger)"
                                   : confPct > 60
-                                    ? "#e67e22"
-                                    : "#7080e0",
+                                    ? "var(--color-warn)"
+                                    : "var(--color-info)",
                             }}
                           />
                         </div>
@@ -194,7 +198,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
                     )}
                   </div>
                 ) : (
-                  <span className="text-[11px] font-bold px-2.25 py-0.5 rounded-full bg-[#0f1f0f] text-[#6a9e6a] border border-[#2a4a2a] whitespace-nowrap">
+                  <span className="text-[11px] font-bold px-2.25 py-0.5 rounded-full bg-success-dim text-success-text border border-success-border whitespace-nowrap">
                     Allowed
                   </span>
                 )}
@@ -215,7 +219,7 @@ const QueryTable: React.FC<QueryTableProps> = ({
                       {label}
                     </span>
                   ) : (
-                    <span className="text-[#333] text-[12px]">—</span>
+                    <span className="text-text-dead text-[12px]">—</span>
                   )}
                   {!compact && (
                     <div className="flex gap-0.75">
@@ -227,10 +231,14 @@ const QueryTable: React.FC<QueryTableProps> = ({
                           className="text-[10px] px-1.5 py-px rounded-[3px] border whitespace-nowrap cursor-pointer disabled:cursor-wait"
                           style={{
                             background:
-                              qaState === "allowed" ? "#1a2a1a" : "#111",
+                              qaState === "allowed"
+                                ? "var(--color-success-dim)"
+                                : "var(--color-surface-2)",
                             color:
-                              qaState === "allowed" ? "#80c080" : "#798777",
-                            borderColor: "#2a3a2a",
+                              qaState === "allowed"
+                                ? "var(--color-success-text)"
+                                : "var(--color-accent)",
+                            borderColor: "var(--color-success-border)",
                             opacity: qaState === "pending" ? 0.6 : 1,
                           }}
                         >
@@ -249,10 +257,14 @@ const QueryTable: React.FC<QueryTableProps> = ({
                           className="text-[10px] px-1.5 py-px rounded-[3px] border whitespace-nowrap cursor-pointer disabled:cursor-wait"
                           style={{
                             background:
-                              qaState === "blocked" ? "#2a1010" : "#111",
+                              qaState === "blocked"
+                                ? "var(--color-danger-dim)"
+                                : "var(--color-surface-2)",
                             color:
-                              qaState === "blocked" ? "#e07070" : "#a06060",
-                            borderColor: "#3a2020",
+                              qaState === "blocked"
+                                ? "var(--color-danger)"
+                                : "var(--color-text-muted)",
+                            borderColor: "var(--color-danger-border)",
                             opacity: qaState === "pending" ? 0.6 : 1,
                           }}
                         >
@@ -276,7 +288,8 @@ const QueryTable: React.FC<QueryTableProps> = ({
                       <span
                         className="text-[11px]"
                         style={{
-                          color: fbSent === "safe" ? ACCENT : "#c0392b",
+                          color:
+                            fbSent === "safe" ? ACCENT : "var(--color-danger)",
                         }}
                       >
                         {fbSent === "safe" ? "✓ Safe" : "✓ Malicious"}
@@ -286,14 +299,14 @@ const QueryTable: React.FC<QueryTableProps> = ({
                         <button
                           onClick={() => onFeedback?.(r, "safe")}
                           title="Mark as safe (false positive)"
-                          className="flex items-center justify-center w-6 h-6 p-0 bg-transparent border border-[#2a4a2a] rounded text-[#4a8a4a] cursor-pointer text-[11px]"
+                          className="flex items-center justify-center w-6 h-6 p-0 bg-transparent border border-success-border rounded text-success cursor-pointer text-[11px]"
                         >
                           <FaThumbsUp />
                         </button>
                         <button
                           onClick={() => onFeedback?.(r, "malicious")}
                           title="Confirm as malicious"
-                          className="flex items-center justify-center w-6 h-6 p-0 bg-transparent border border-[#4a2a2a] rounded text-[#8a4a4a] cursor-pointer text-[11px]"
+                          className="flex items-center justify-center w-6 h-6 p-0 bg-transparent border border-danger-border rounded text-danger cursor-pointer text-[11px]"
                         >
                           <FaThumbsDown />
                         </button>

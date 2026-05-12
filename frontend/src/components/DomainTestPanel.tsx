@@ -37,7 +37,7 @@ const DomainTestPanel: React.FC<Props> = ({
 }) => {
   return (
     <div
-      className={`bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] ${isMobile ? "p-3.5" : "p-[18px_20px]"}`}
+      className={`bg-surface-1 text-text rounded-[10px] border border-border shadow-card ${isMobile ? "p-3.5" : "p-[18px_20px]"}`}
     >
       {/* header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-border-mid">

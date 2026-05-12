@@ -7,6 +7,7 @@ replace github.com/1OSA/guardian-ai/proto => ./proto
 require (
 	github.com/1OSA/guardian-ai/proto v0.0.0-00010101000000-000000000000
 	github.com/miekg/dns v1.1.72
+	golang.org/x/crypto v0.47.0
 	google.golang.org/grpc v1.79.2
 	modernc.org/sqlite v1.46.1
 )

@@ -36,7 +36,7 @@ const MLPage: React.FC = () => {
       setBlockPhishing(d.block_phishing);
       setBlockMalware(d.block_malware);
       setBlockOther(d.block_other);
-      setMlEnabled((d as any).enabled ?? true);
+      setMlEnabled(d.enabled ?? true);
     } catch {
       /* ignore */
     } finally {
@@ -92,7 +92,7 @@ const MLPage: React.FC = () => {
     [threshold, blockDGA, blockPhishing, blockMalware, blockOther],
   );
 
-  const cardCls = `bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] mb-4 ${isMobile ? "p-3.5" : "p-5"}`;
+  const cardCls = `bg-surface-1 text-text rounded-[10px] border border-border shadow-card mb-4 ${isMobile ? "p-3.5" : "p-5"}`;
   const cardHeaderCls =
     "flex items-center gap-2 mb-3.5 pb-3 border-b border-border";
   const statTileCls =

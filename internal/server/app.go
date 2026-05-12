@@ -33,6 +33,7 @@ import (
 	pb "github.com/1OSA/guardian-ai/proto"
 
 	"github.com/miekg/dns"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	_ "modernc.org/sqlite"
@@ -493,6 +494,10 @@ func (srv *GuardianServer) classifyDomain(domain, clientIP string) (bool, string
 		return true, ruleReason, 0, nil
 	}
 
+	if blockedByService, serviceReason := srv.checkServiceBlocks(domain, clientIP); blockedByService {
+		return true, serviceReason, 0, nil
+	}
+
 	srv.blocklistMu.RLock()
 	if _, blocked := srv.blocklist[domain]; blocked {
 		srv.blocklistMu.RUnlock()
@@ -525,13 +530,13 @@ func (srv *GuardianServer) classifyDomain(domain, clientIP string) (bool, string
 }
 
 func (srv *GuardianServer) checkCustomRules(domain, clientIP string) (bool, bool, string) {
-	var groupIDs []int
+	var groupIDs []string
 	if clientIP != "" {
 		srv.dbMu.RLock()
 		rows, err := srv.db.QueryContext(srv.ctx, "SELECT group_id FROM client_group_members WHERE client_ip = ?", clientIP)
 		if err == nil {
 			for rows.Next() {
-				var id int
+				var id string
 				if rows.Scan(&id) == nil {
 					groupIDs = append(groupIDs, id)
 				}
@@ -547,7 +552,7 @@ func (srv *GuardianServer) checkCustomRules(domain, clientIP string) (bool, bool
 		keys = append(keys, "rules:client:"+clientIP)
 	}
 	for _, id := range groupIDs {
-		keys = append(keys, fmt.Sprintf("rules:group:%d", id))
+		keys = append(keys, "rules:group:"+id)
 	}
 	keys = append(keys, "rules:global")
 
@@ -587,6 +592,185 @@ func (srv *GuardianServer) checkCustomRules(domain, clientIP string) (bool, bool
 	}
 
 	return false, false, ""
+}
+
+func (srv *GuardianServer) checkServiceBlocks(domain, clientIP string) (bool, string) {
+	serviceIDs := getServiceIDsForDomain(domain)
+	if len(serviceIDs) == 0 {
+		return false, ""
+	}
+
+	groupKeys := srv.getGroupScopeKeys(clientIP)
+	allowFound := false
+
+	for _, serviceID := range serviceIDs {
+		decided, blocked := srv.resolveServiceDecision(serviceID, clientIP, groupKeys)
+		if !decided {
+			continue
+		}
+		if blocked {
+			return true, "service:" + serviceID
+		}
+		allowFound = true
+	}
+
+	if allowFound {
+		return false, ""
+	}
+
+	return false, ""
+}
+
+func (srv *GuardianServer) resolveServiceDecision(serviceID, clientIP string, groupKeys map[string]struct{}) (bool, bool) {
+	schedules, err := srv.getServiceSchedules(serviceID)
+	if err != nil {
+		return false, false
+	}
+
+	now := time.Now()
+
+	// Client-specific override (block wins over allow)
+	if clientIP != "" {
+		clientKey := "client:" + clientIP
+		hasAllow := false
+		for _, s := range schedules {
+			if s.Scope != "client" {
+				continue
+			}
+			if s.ScopeKey != clientIP && s.ScopeKey != clientKey {
+				continue
+			}
+			if !isServiceScheduleActive(s, now) {
+				continue
+			}
+			if s.Enabled {
+				return true, true
+			}
+			hasAllow = true
+		}
+		if hasAllow {
+			return true, false
+		}
+	}
+
+	// Group overrides (block wins over allow)
+	if len(groupKeys) > 0 {
+		hasAllow := false
+		for _, s := range schedules {
+			if s.Scope != "group" {
+				continue
+			}
+			if _, ok := groupKeys[s.ScopeKey]; !ok {
+				continue
+			}
+			if !isServiceScheduleActive(s, now) {
+				continue
+			}
+			if s.Enabled {
+				return true, true
+			}
+			hasAllow = true
+		}
+		if hasAllow {
+			return true, false
+		}
+	}
+
+	// Global schedule (block wins over allow)
+	hasAllow := false
+	for _, s := range schedules {
+		if s.Scope != "" && s.Scope != "global" {
+			continue
+		}
+		if !isServiceScheduleActive(s, now) {
+			continue
+		}
+		if s.Enabled {
+			return true, true
+		}
+		hasAllow = true
+	}
+	if hasAllow {
+		return true, false
+	}
+
+	return false, false
+}
+
+func (srv *GuardianServer) getGroupScopeKeys(clientIP string) map[string]struct{} {
+	if clientIP == "" {
+		return nil
+	}
+
+	keys := make(map[string]struct{})
+
+	srv.dbMu.RLock()
+	rows, err := srv.db.QueryContext(srv.ctx, "SELECT group_id FROM client_group_members WHERE client_ip = ?", clientIP)
+	if err != nil {
+		srv.dbMu.RUnlock()
+		return keys
+	}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			// Support prefixed, double-prefixed, and legacy unprefixed keys.
+			keys["group:"+id] = struct{}{}
+			keys["group:group:"+id] = struct{}{}
+			keys[id] = struct{}{}
+		}
+	}
+	rows.Close()
+	srv.dbMu.RUnlock()
+
+	return keys
+}
+
+func getServiceIDsForDomain(domain string) []string {
+	parts := strings.Split(strings.ToLower(domain), ".")
+	seen := make(map[string]struct{})
+	var ids []string
+
+	for i := 0; i < len(parts); i++ {
+		suffix := strings.Join(parts[i:], ".")
+		if svcIDs, ok := config.ServiceDomainIndex[suffix]; ok {
+			for _, id := range svcIDs {
+				if _, exists := seen[id]; exists {
+					continue
+				}
+				seen[id] = struct{}{}
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	return ids
+}
+
+func isServiceScheduleActive(s ServiceSchedule, now time.Time) bool {
+	if s.DayOfWeek >= 0 {
+		if int(now.Weekday()) != s.DayOfWeek {
+			return false
+		}
+	}
+
+	if s.StartHour >= 0 && s.EndHour >= 0 {
+		currentHour := now.Hour()
+		if s.StartHour == s.EndHour {
+			return true
+		}
+		if s.StartHour < s.EndHour {
+			if currentHour < s.StartHour || currentHour >= s.EndHour {
+				return false
+			}
+		} else {
+			// Overnight range (e.g., 22 -> 6)
+			if currentHour < s.StartHour || currentHour >= s.EndHour {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func (srv *GuardianServer) classifyWithML(domain string) (bool, string, float32, error) {
@@ -1626,9 +1810,20 @@ func (srv *GuardianServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !verifyPassword(passwordHash, req.Password) {
+	validPassword, needsUpgrade := verifyPassword(passwordHash, req.Password)
+	if !validPassword {
 		srv.httpError(w, "invalid credentials", http.StatusUnauthorized)
 		return
+	}
+
+	if needsUpgrade {
+		if upgradedHash, err := hashPassword(req.Password); err == nil && upgradedHash != "" {
+			if _, err := srv.db.ExecContext(r.Context(), `
+				UPDATE users SET password_hash = ? WHERE id = ?
+			`, upgradedHash, userID); err != nil {
+				srv.Logf(LogLevelWarn, logPrefixAuth, "failed to upgrade password hash for %s: %v", req.Username, err)
+			}
+		}
 	}
 
 	sessionID := randomID()
@@ -1840,7 +2035,11 @@ func (srv *GuardianServer) handleSetupDefault(w http.ResponseWriter, r *http.Req
 	}
 
 	userID := randomID()
-	passwordHash := hashPassword(req.Password)
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		srv.httpError(w, "failed to secure password", http.StatusInternalServerError)
+		return
+	}
 
 	_, err = srv.db.ExecContext(r.Context(), `
 		INSERT INTO users (id, username, password_hash, is_admin, created_at)
@@ -2408,8 +2607,25 @@ func (srv *GuardianServer) handleTestDomain(w http.ResponseWriter, r *http.Reque
 		checks = append(checks, "   - No custom rules matched")
 	}
 
-	// Step 2: Check blocklist
-	checks = append(checks, "2. Checking blocklist...")
+	// Step 2: Check service blocks
+	checks = append(checks, "2. Checking service blocks...")
+	if blockedByService, serviceReason := srv.checkServiceBlocks(domain, clientIP); blockedByService {
+		checks = append(checks, fmt.Sprintf("   ✓ Service block matched (%s)", serviceReason))
+		srv.httpJSON(w, map[string]interface{}{
+			"domain":     domain,
+			"client_ip":  clientIP,
+			"blocked":    true,
+			"reason":     serviceReason,
+			"category":   "service",
+			"confidence": 0,
+			"checks":     checks,
+		}, http.StatusOK)
+		return
+	}
+	checks = append(checks, "   - No service blocks matched")
+
+	// Step 3: Check blocklist
+	checks = append(checks, "3. Checking blocklist...")
 	srv.blocklistMu.RLock()
 	_, inBlocklist := srv.blocklist[domain]
 	srv.blocklistMu.RUnlock()
@@ -2429,8 +2645,8 @@ func (srv *GuardianServer) handleTestDomain(w http.ResponseWriter, r *http.Reque
 	}
 	checks = append(checks, "   - Not in blocklist")
 
-	// Step 3: Check ML classification
-	checks = append(checks, "3. Running ML classification...")
+	// Step 4: Check ML classification
+	checks = append(checks, "4. Running ML classification...")
 	if srv.mlClient == nil {
 		checks = append(checks, "   - ML service unavailable")
 	} else {
@@ -2547,6 +2763,10 @@ func (srv *GuardianServer) handleGetServices(w http.ResponseWriter, r *http.Requ
 
 		if err := rows.Scan(&serviceID, &enabled, &dayOfWeek, &startHour, &endHour, &rowScope); err != nil {
 			continue
+		}
+
+		if rowScope == "" {
+			rowScope = "global"
 		}
 
 		// If it's already in the map and it's a global row, skip it (because specific scope wins).
@@ -3373,13 +3593,29 @@ func randomID() string {
 	return hex.EncodeToString(b)
 }
 
-func hashPassword(password string) string {
-	return base64.StdEncoding.EncodeToString([]byte(password))
+func hashPassword(password string) (string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashed), nil
 }
 
-func verifyPassword(hash, password string) bool {
-	expected, _ := base64.StdEncoding.DecodeString(hash)
-	return string(expected) == password
+func verifyPassword(hash, password string) (bool, bool) {
+	if strings.HasPrefix(hash, "$2a$") || strings.HasPrefix(hash, "$2b$") || strings.HasPrefix(hash, "$2y$") {
+		return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, false
+	}
+
+	// Legacy base64 fallback
+	decoded, err := base64.StdEncoding.DecodeString(hash)
+	if err != nil {
+		return false, false
+	}
+	if string(decoded) == password {
+		return true, true
+	}
+
+	return false, false
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -3505,12 +3741,18 @@ func (srv *GuardianServer) getServiceSchedules(serviceID string) ([]ServiceSched
 		}
 		if dayOfWeek.Valid {
 			s.DayOfWeek = int(dayOfWeek.Int64)
+		} else {
+			s.DayOfWeek = -1
 		}
 		if startHour.Valid {
 			s.StartHour = int(startHour.Int64)
+		} else {
+			s.StartHour = -1
 		}
 		if endHour.Valid {
 			s.EndHour = int(endHour.Int64)
+		} else {
+			s.EndHour = -1
 		}
 		schedules = append(schedules, s)
 	}

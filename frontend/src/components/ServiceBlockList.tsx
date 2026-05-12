@@ -94,9 +94,10 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
             onClick={() => setCatFilter(cat)}
             className="px-2.5 py-0.75 rounded-full text-[11px] font-semibold cursor-pointer"
             style={{
-              border: `1px solid ${catFilter === cat ? ACCENT : "#2a2a2a"}`,
-              background: catFilter === cat ? "#1a211a" : "transparent",
-              color: catFilter === cat ? ACCENT : "#666",
+              border: `1px solid ${catFilter === cat ? ACCENT : "var(--color-border-mid)"}`,
+              background:
+                catFilter === cat ? "var(--color-accent-dim)" : "transparent",
+              color: catFilter === cat ? ACCENT : "var(--color-text-faint)",
             }}
           >
             {cat}
@@ -114,9 +115,13 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
           }
           className="flex items-center gap-1.25 px-2.75 py-0.75 rounded-full text-[11px] font-bold cursor-pointer whitespace-nowrap"
           style={{
-            border: `1px solid ${allFilteredBlocked ? "#7a3333" : "#2a3a2a"}`,
-            background: allFilteredBlocked ? "#2a1414" : "#141a14",
-            color: allFilteredBlocked ? "#c0392b" : "#798777",
+            border: `1px solid ${allFilteredBlocked ? "var(--color-danger-border)" : "var(--color-success-border)"}`,
+            background: allFilteredBlocked
+              ? "var(--color-danger-dim)"
+              : "var(--color-success-dim)",
+            color: allFilteredBlocked
+              ? "var(--color-danger)"
+              : "var(--color-accent)",
           }}
         >
           <FaLock className="text-[9px]" />
@@ -131,10 +136,12 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
         const sched = getSchedule(svc.id);
         const isExpanded = expanded === svc.id;
         const isSaving = saving === svc.id;
-        // Treat any non-global source (e.g., 'client' or 'group') as an override for client scope
+        const isScoped = scope === "client" || scope === "group";
+        const scopeLabel = scope === "group" ? "group" : "client";
+        // Treat any non-global source as an override for scoped (client/group) views
         const hasOverride =
-          scope === "client" && !!sched.source && sched.source !== "global";
-        const isInheriting = scope === "client" && !hasOverride;
+          isScoped && !!sched.source && sched.source !== "global";
+        const isInheriting = isScoped && !hasOverride;
         const effectiveEnabled = sched.enabled;
         const hasSchedule = !!(
           sched.days_of_week ||
@@ -146,8 +153,10 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
             key={svc.id}
             className="rounded-lg mb-2 overflow-hidden transition-[border-color] duration-200"
             style={{
-              border: `1px solid ${sched.enabled ? "#3a2a2a" : "#222"}`,
-              background: sched.enabled ? "#1c1414" : "#0f0f0f",
+              border: `1px solid ${sched.enabled ? "var(--color-danger-border)" : "var(--color-border)"}`,
+              background: sched.enabled
+                ? "var(--color-danger-dim)"
+                : "var(--color-surface-3)",
             }}
           >
             {/* row */}
@@ -160,12 +169,12 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                   <span className="text-[13px] font-semibold text-text">
                     {svc.name}
                   </span>
-                  <span className="text-[10px] px-1.5 py-px rounded-full bg-[#1a1a2a] text-[#7a8fa0] border border-[#2a2a3a]">
+                  <span className="text-[10px] px-1.5 py-px rounded-full bg-info-dim text-info border border-info-border">
                     {svc.category}
                   </span>
                   {isInheriting && (
                     <span
-                      title="No client override — inheriting from global schedule."
+                      title={`No ${scopeLabel} override — inheriting from global schedule.`}
                       className="text-[10px] font-semibold px-1.5 py-px rounded-[3px] bg-surface-1 text-text-ghost border border-border-mid whitespace-nowrap"
                     >
                       Inherited
@@ -173,8 +182,8 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                   )}
                   {hasOverride && (
                     <span
-                      title="This client has a custom override for this service."
-                      className="text-[10px] font-semibold px-1.5 py-px rounded-[3px] bg-accent-dim whitespace-nowrap border border-[#2a3a2a]"
+                      title={`This ${scopeLabel} has a custom override for this service.`}
+                      className="text-[10px] font-semibold px-1.5 py-px rounded-[3px] bg-accent-dim whitespace-nowrap border border-success-border"
                       style={{ color: ACCENT }}
                     >
                       Custom
@@ -194,9 +203,14 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                 title="Configure schedule"
                 className="flex items-center justify-center w-6.5 h-6.5 p-0 rounded shrink-0 cursor-pointer text-[11px]"
                 style={{
-                  background: isExpanded ? "#222" : "transparent",
-                  border: `1px solid ${hasSchedule && sched.enabled ? "#5a3a1a" : "#2a2a2a"}`,
-                  color: hasSchedule && sched.enabled ? "#e67e22" : "#555",
+                  background: isExpanded
+                    ? "var(--color-border)"
+                    : "transparent",
+                  border: `1px solid ${hasSchedule && sched.enabled ? "var(--color-warn-border)" : "var(--color-border-mid)"}`,
+                  color:
+                    hasSchedule && sched.enabled
+                      ? "var(--color-warn)"
+                      : "var(--color-text-ghost)",
                 }}
               >
                 <FaClock />
@@ -207,8 +221,8 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                 <button
                   onClick={() => onReset(svc.id)}
                   disabled={isSaving}
-                  title="Remove client override — revert to inheriting global schedule"
-                  className="flex items-center gap-0.75 px-2 py-1.25 rounded-md border border-[#2a2a3a] bg-transparent text-text-ghost text-[10px] font-semibold shrink-0 whitespace-nowrap cursor-pointer disabled:cursor-wait"
+                  title={`Remove ${scopeLabel} override — revert to inheriting global schedule`}
+                  className="flex items-center gap-0.75 px-2 py-1.25 rounded-md border border-info-border bg-transparent text-text-ghost text-[10px] font-semibold shrink-0 whitespace-nowrap cursor-pointer disabled:cursor-wait"
                 >
                   ↩ Inherit
                 </button>
@@ -217,40 +231,40 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
               {/* block toggle */}
               <button
                 onClick={() => {
-                  // Global scope: simple toggle (anything that's not client/group)
-                  if (!(scope === "client" || scope === "group")) {
+                  // Global scope: simple toggle
+                  if (!isScoped) {
                     onSave(svc.id, { enabled: !sched.enabled });
                     return;
                   }
 
-                  // Client scope: cycle through states
-                  // - If inheriting: create a client override -> Blocked (enabled=true)
-                  // - If has override and client-blocked: switch to client-unblocked (enabled=false)
-                  // - If has override and client-unblocked: remove override (inherit)
+                  // Scoped (client/group): cycle through states
+                  // - If inheriting: create an override -> Blocked (enabled=true)
+                  // - If has override and blocked: switch to Allowed (explicit unblocked)
+                  // - If has override and allowed: remove override (inherit)
                   if (isInheriting) {
                     // Create an override with the opposite of the effective (global) value.
                     // If the service is blocked globally, this will create an explicit unblocked override.
                     onSave(svc.id, { enabled: !effectiveEnabled });
                   } else {
                     if (sched.enabled) {
-                      // Currently client override is Blocked -> switch to Allowed (explicit unblocked)
+                      // Currently override is Blocked -> switch to Allowed (explicit unblocked)
                       onSave(svc.id, { enabled: false });
                     } else {
-                      // Currently client override is Unblocked -> remove override (inherit)
+                      // Currently override is Allowed -> remove override (inherit)
                       if (onReset) onReset(svc.id);
                     }
                   }
                 }}
                 disabled={isSaving}
                 title={
-                  scope === "client"
+                  isScoped
                     ? isInheriting
                       ? effectiveEnabled
-                        ? "Inheriting a global block — click to create a client override (Blocked). Click again to switch to Allowed."
-                        : "Inheriting a global allow — click to create a client override (Blocked)."
+                        ? `Inheriting a global block — click to create a ${scopeLabel} override (Blocked). Click again to switch to Allowed.`
+                        : `Inheriting a global allow — click to create a ${scopeLabel} override (Blocked).`
                       : sched.enabled
-                        ? "Client override: Blocked. Click to switch to Allowed (explicitly allow for this client)."
-                        : "Client override: Allowed (explicitly allowed). Click to remove override and revert to Inherit."
+                        ? `${scopeLabel} override: Blocked. Click to switch to Allowed (explicitly allow for this ${scopeLabel}).`
+                        : `${scopeLabel} override: Allowed (explicitly allowed). Click to remove override and revert to Inherit.`
                     : sched.enabled
                       ? "Click to unblock (global)"
                       : "Click to block (global)"
@@ -262,39 +276,39 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                     scope === "client"
                       ? isInheriting
                         ? effectiveEnabled
-                          ? "#7a3333"
-                          : "#2a2a2a"
+                          ? "var(--color-danger-border)"
+                          : "var(--color-border-mid)"
                         : sched.enabled
-                          ? "#7a3333"
-                          : "#2a3a2a"
+                          ? "var(--color-danger-border)"
+                          : "var(--color-success-border)"
                       : sched.enabled
-                        ? "#7a3333"
-                        : "#2a3a2a"
+                        ? "var(--color-danger-border)"
+                        : "var(--color-success-border)"
                   }`,
                   background:
                     scope === "client"
                       ? isInheriting
                         ? effectiveEnabled
-                          ? "#2a1414"
-                          : "#111"
+                          ? "var(--color-danger-dim)"
+                          : "var(--color-surface-2)"
                         : sched.enabled
-                          ? "#2a1414"
-                          : "#141a14"
+                          ? "var(--color-danger-dim)"
+                          : "var(--color-success-dim)"
                       : sched.enabled
-                        ? "#2a1414"
-                        : "#141a14",
+                        ? "var(--color-danger-dim)"
+                        : "var(--color-success-dim)",
                   color:
                     scope === "client"
                       ? isInheriting
                         ? effectiveEnabled
-                          ? "#c0392b"
-                          : "#444"
+                          ? "var(--color-danger)"
+                          : "var(--color-text-dead)"
                         : sched.enabled
-                          ? "#c0392b"
-                          : "#798777"
+                          ? "var(--color-danger)"
+                          : "var(--color-accent)"
                       : sched.enabled
-                        ? "#c0392b"
-                        : "#798777",
+                        ? "var(--color-danger)"
+                        : "var(--color-accent)",
                   opacity: isSaving ? 0.6 : 1,
                 }}
               >
@@ -341,9 +355,11 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                           onClick={() => toggleDay(svc.id, idx)}
                           className="w-8.5 h-8.5 rounded-md text-[11px] font-semibold cursor-pointer"
                           style={{
-                            border: `1px solid ${active ? ACCENT : "#2a2a2a"}`,
-                            background: active ? "#1a211a" : "#0f0f0f",
-                            color: active ? ACCENT : "#555",
+                            border: `1px solid ${active ? ACCENT : "var(--color-border-mid)"}`,
+                            background: active
+                              ? "var(--color-accent-dim)"
+                              : "var(--color-surface-3)",
+                            color: active ? ACCENT : "var(--color-text-ghost)",
                           }}
                         >
                           {label}
@@ -374,7 +390,7 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                         onSave(svc.id, { time_start: e.target.value })
                       }
                       className="px-1.75 py-1.25 bg-surface-3 border border-border-mid rounded-md text-text text-[12px]"
-                      style={{ colorScheme: "dark" }}
+                      style={{ colorScheme: "light dark" }}
                     />
                     <span className="text-text-dead text-[12px]">to</span>
                     <input
@@ -384,7 +400,7 @@ const ServiceBlockList: React.FC<ServiceBlockListProps> = ({
                         onSave(svc.id, { time_end: e.target.value })
                       }
                       className="px-1.75 py-1.25 bg-surface-3 border border-border-mid rounded-md text-text text-[12px]"
-                      style={{ colorScheme: "dark" }}
+                      style={{ colorScheme: "light dark" }}
                     />
                     {(sched.time_start || sched.time_end) && (
                       <button

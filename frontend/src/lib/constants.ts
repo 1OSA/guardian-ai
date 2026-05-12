@@ -1,5 +1,5 @@
 /** Accent colour — still needed for recharts, icon tints, and dynamic border colours. */
-export const ACCENT = "#798777";
+export const ACCENT = "var(--color-accent)";
 
 /** Polling intervals (ms) — change here to affect the whole app. */
 export const POLL_DASHBOARD_MS = 10_000;

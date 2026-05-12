@@ -45,7 +45,8 @@ const ServicesPage: React.FC = () => {
     const next: ServiceSchedule = {
       ...current,
       ...patch,
-      enabled: patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled
+      enabled:
+        patch.enabled !== undefined ? Boolean(patch.enabled) : current.enabled,
     };
 
     setSaving(svcId);
@@ -84,11 +85,11 @@ const ServicesPage: React.FC = () => {
         <Link to="/clients" className="no-underline" style={{ color: ACCENT }}>
           Clients
         </Link>{" "}
-        → edit a client →{" "}
-        <strong className="text-[#c8c8c8]">Service Blocks</strong> tab.
+        → edit a client → <strong className="text-text">Service Blocks</strong>{" "}
+        tab.
       </p>
 
-      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-5 mb-4">
+      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card p-5 mb-4">
         <div className="flex items-center gap-2 mb-3.5">
           <FaGlobe style={{ color: ACCENT, fontSize: 13 }} />
           <span className="text-[14px] font-bold text-text">

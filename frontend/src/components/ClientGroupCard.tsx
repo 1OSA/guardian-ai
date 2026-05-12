@@ -121,9 +121,13 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
     <span
       className="text-[10px] font-bold px-1.75 py-px rounded-[10px] border"
       style={{
-        background: allowed ? "#1a211a" : "#2a1414",
-        color: allowed ? ACCENT : "#c0392b",
-        borderColor: allowed ? "#3a5a3a" : "#7a3333",
+        background: allowed
+          ? "var(--color-accent-dim)"
+          : "var(--color-danger-dim)",
+        color: allowed ? ACCENT : "var(--color-danger)",
+        borderColor: allowed
+          ? "var(--color-success-border)"
+          : "var(--color-danger-border)",
       }}
     >
       {allowed ? "Allowed" : "Blocked"}
@@ -131,7 +135,7 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
   );
 
   const inputCls =
-    "w-full px-2.5 py-2 border border-[#333] rounded-md bg-surface-2 text-text text-[13px] outline-none box-border";
+    "w-full px-2.5 py-2 border border-border-mid rounded-md bg-surface-2 text-text text-[13px] outline-none box-border";
   const textareaCls = `${inputCls} font-mono resize-y`;
   const fieldLabelCls =
     "block text-[11px] font-semibold text-text-faint mb-1 uppercase tracking-[0.04em]";
@@ -140,32 +144,36 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
     <div
       className="border rounded-lg mb-2.5 overflow-hidden"
       style={{
-        borderColor: "#222",
-        background: isEditing ? "#141414" : "#0f0f0f",
+        borderColor: "var(--color-border)",
+        background: isEditing
+          ? "var(--color-surface-1)"
+          : "var(--color-surface-3)",
       }}
     >
       {/* ── row header ── */}
       <div
         className="flex items-center gap-2.5 px-3.5 py-2.5"
-        style={{ borderBottom: isEditing ? "1px solid #1e1e1e" : "none" }}
+        style={{
+          borderBottom: isEditing
+            ? "1px solid var(--color-border-dim)"
+            : "none",
+        }}
       >
         <FaNetworkWired className="text-text-ghost shrink-0" />
         <div className="flex-1 min-w-0">
           {/* name + status chips */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-bold text-[#c8d4c6]">
-              {g.name}
-            </span>
+            <span className="text-[13px] font-bold text-text">{g.name}</span>
             {g.label && (
               <span className="text-[12px] text-text-faint">{g.label}</span>
             )}
             {chipStatus(!g.blocked)}
-            <span className="text-[10px] px-1.75 py-px rounded-[10px] bg-[#1a1a2a] text-[#7a8fa0] border border-[#2a2a3a]">
+            <span className="text-[10px] px-1.75 py-px rounded-[10px] bg-info-dim text-info border border-info-border">
               {g.members.length} {g.members.length === 1 ? "device" : "devices"}
             </span>
             {blockedSvcCount > 0 && (
               <span
-                className="text-[10px] px-1.75 py-px rounded-[10px] bg-danger-dim text-danger border border-[#7a333344]"
+                className="text-[10px] px-1.75 py-px rounded-[10px] bg-danger-dim text-danger border border-danger-border"
                 title={`${blockedSvcCount} service${blockedSvcCount !== 1 ? "s" : ""} blocked`}
               >
                 🔒 {blockedSvcCount} blocked
@@ -179,7 +187,12 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
               <span
                 key={m.id}
                 className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-surface-1 border border-border-mid"
-                style={{ color: m.type === "mac" ? "#7a8fa0" : "#c8d4c6" }}
+                style={{
+                  color:
+                    m.type === "mac"
+                      ? "var(--color-info)"
+                      : "var(--color-text)",
+                }}
               >
                 {m.type === "mac" ? "⬡" : "●"} {m.identifier}
                 <button
@@ -195,8 +208,8 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
               onClick={() => setAddMemberGroupId(isAddingMember ? null : g.id)}
               className="inline-flex items-center gap-0.75 text-[11px] px-2 py-0.5 rounded-sm bg-transparent cursor-pointer"
               style={{
-                border: `1px dashed ${isAddingMember ? ACCENT : "#333"}`,
-                color: isAddingMember ? ACCENT : "#555",
+                border: `1px dashed ${isAddingMember ? ACCENT : "var(--color-border-mid)"}`,
+                color: isAddingMember ? ACCENT : "var(--color-text-ghost)",
               }}
             >
               <FaPlus className="text-[8px]" /> Add
@@ -220,7 +233,7 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
                 placeholder={
                   memberType === "ip" ? "192.168.1.x" : "aa:bb:cc:dd:ee:ff"
                 }
-                className="flex-1 min-w-35 px-2.5 py-1.25 border border-[#333] rounded-md bg-surface-2 text-text text-[12px] outline-none box-border"
+                className="flex-1 min-w-35 px-2.5 py-1.25 border border-border-mid rounded-md bg-surface-2 text-text text-[12px] outline-none box-border"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onAddMember(g.id);
                 }}
@@ -251,7 +264,9 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
           <button
             onClick={() => (isEditing ? setEditingId(null) : onStartEdit(g))}
             className="flex items-center justify-center w-7 h-7 p-0 border border-border-mid rounded text-text-muted cursor-pointer text-[12px] shrink-0"
-            style={{ background: isEditing ? "#222" : "transparent" }}
+            style={{
+              background: isEditing ? "var(--color-border)" : "transparent",
+            }}
           >
             <FaEdit />
           </button>
@@ -305,7 +320,7 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
               className="px-3.5 py-1.5 bg-transparent border-none cursor-pointer text-[12px] font-semibold -mb-px"
               style={{
                 borderBottom: `2px solid ${editTab === "rules" ? ACCENT : "transparent"}`,
-                color: editTab === "rules" ? ACCENT : "#555",
+                color: editTab === "rules" ? ACCENT : "var(--color-text-ghost)",
               }}
             >
               Custom Rules
@@ -318,15 +333,19 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
               className="px-3.5 py-1.5 bg-transparent border-none cursor-pointer text-[12px] font-semibold -mb-px flex items-center gap-1.25"
               style={{
                 borderBottom: `2px solid ${editTab === "services" ? ACCENT : "transparent"}`,
-                color: editTab === "services" ? ACCENT : "#555",
+                color:
+                  editTab === "services" ? ACCENT : "var(--color-text-ghost)",
               }}
             >
               Service Blocks
               {blockedSvcCount > 0 && (
                 <span
-                  className="text-[9px] font-bold px-1.25 py-px rounded-lg text-danger border border-[#7a333333]"
+                  className="text-[9px] font-bold px-1.25 py-px rounded-lg text-danger border border-danger-border"
                   style={{
-                    background: editTab === "services" ? "#2a1414" : "#1e1414",
+                    background:
+                      editTab === "services"
+                        ? "var(--color-danger-dim)"
+                        : "var(--color-surface-3)",
                   }}
                 >
                   {blockedSvcCount}
@@ -408,15 +427,15 @@ const ClientGroupCard: React.FC<ClientGroupCardProps> = ({
                   editSaveStatus === "saved"
                     ? ACCENT
                     : editSaveStatus === "saving"
-                      ? "#555"
+                      ? "var(--color-text-ghost)"
                       : "transparent",
               }}
             >
               {editSaveStatus === "saving" ? (
                 <>
                   <span
-                    className="inline-block w-2.5 h-2.5 rounded-full border-2 border-[#333] spin-slow"
-                    style={{ borderTopColor: "#555" }}
+                    className="inline-block w-2.5 h-2.5 rounded-full border-2 border-border-mid spin-slow"
+                    style={{ borderTopColor: "var(--color-text-ghost)" }}
                   />
                   Saving…
                 </>

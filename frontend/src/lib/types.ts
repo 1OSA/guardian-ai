@@ -78,8 +78,8 @@ export type ServiceSchedule = {
   days_of_week: string;
   time_start: string;
   time_end: string;
-  /** "client" = this client has an explicit override; "global" = inherited from global schedule */
-  source?: "client" | "global";
+  /** "client"/"group" = explicit override; "global" = inherited from global schedule */
+  source?: "client" | "group" | "global";
 };
 
 export type ServiceScheduleMap = Record<string, ServiceSchedule>;
@@ -97,6 +97,7 @@ export type MLSettings = {
   feedback_safe: number;
   feedback_mal: number;
   ml_connected: boolean;
+  enabled?: boolean;
 };
 
 export type ReasonColors = { bg: string; fg: string; border: string };

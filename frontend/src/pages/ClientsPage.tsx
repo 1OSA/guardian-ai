@@ -124,11 +124,24 @@ const ClientsPage: React.FC = () => {
     [loadRules, fetchGroupSvcSchedules],
   );
 
+  const normalizeGroups = (data: unknown[]): ClientGroup[] =>
+    (data as Array<Record<string, unknown>>).map((g) => ({
+      id: Number(g.id),
+      name: String(g.name ?? ""),
+      label: String(g.label ?? g.description ?? ""),
+      blocked: Boolean(g.blocked),
+      created_at: String(g.created_at ?? ""),
+      members: Array.isArray(g.members)
+        ? (g.members as ClientGroup["members"])
+        : [],
+      rule_count: typeof g.rule_count === "number" ? g.rule_count : undefined,
+    }));
+
   const fetchGroups = useCallback(async (): Promise<ClientGroup[]> => {
     setLoading(true);
     try {
       const res = await axios.get("/api/groups");
-      const data = res.data as ClientGroup[];
+      const data = normalizeGroups(res.data as unknown[]);
       setGroups(data);
       return data;
     } catch {
@@ -399,10 +412,13 @@ const ClientsPage: React.FC = () => {
   const visibleGroups = groups.filter((g) => {
     if (!clientSearch.trim()) return true;
     const s = clientSearch.toLowerCase();
+    const name = (g.name ?? "").toLowerCase();
+    const label = (g.label ?? "").toLowerCase();
+    const members = g.members ?? [];
     return (
-      g.name.toLowerCase().includes(s) ||
-      g.label.toLowerCase().includes(s) ||
-      g.members.some((m) => m.identifier.toLowerCase().includes(s))
+      name.includes(s) ||
+      label.includes(s) ||
+      members.some((m) => (m.identifier ?? "").toLowerCase().includes(s))
     );
   });
 
@@ -416,7 +432,7 @@ const ClientsPage: React.FC = () => {
         <span className="text-xl font-bold text-text">Clients</span>
       </div>
 
-      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-5 mb-4">
+      <div className="bg-surface-1 text-text rounded-[10px] border border-border shadow-card p-5 mb-4">
         {/* card header */}
         <div className="flex items-center justify-between mb-3.5">
           <div className="flex items-center gap-2">
@@ -429,7 +445,9 @@ const ClientsPage: React.FC = () => {
             onClick={() => setShowAdd((v) => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-[12px] font-semibold cursor-pointer"
             style={{
-              background: showAdd ? "#111" : "#1a211a",
+              background: showAdd
+                ? "var(--color-surface-2)"
+                : "var(--color-accent-dim)",
               border: `1px solid ${ACCENT}`,
               color: ACCENT,
             }}
@@ -465,7 +483,7 @@ const ClientsPage: React.FC = () => {
               value={clientSearch}
               onChange={(e) => setClientSearch(e.target.value)}
               placeholder="Search by name, description, or IP / MAC…"
-              className="w-full px-2.5 py-2 border border-[#333] rounded-md bg-surface-2 text-text text-[13px] outline-none box-border"
+              className="w-full px-2.5 py-2 border border-border-mid rounded-md bg-surface-2 text-text text-[13px] outline-none box-border"
             />
           </div>
         )}

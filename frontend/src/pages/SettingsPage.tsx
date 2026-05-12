@@ -389,7 +389,7 @@ const SettingsPage: React.FC = () => {
   // ── shared class helpers ─────────────────────────────────────────────────
 
   const cardCls =
-    "bg-surface-1 text-text rounded-[10px] border border-border shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-[18px_20px]";
+    "bg-surface-1 text-text rounded-[10px] border border-border shadow-card p-[18px_20px]";
   const cardHeaderCls =
     "flex items-center justify-between mb-4 pb-3 border-b border-border-mid";
   const cardTitleCls =
@@ -397,7 +397,7 @@ const SettingsPage: React.FC = () => {
   const fieldLabelCls =
     "block text-[11px] font-semibold text-text-faint mb-1 uppercase tracking-[0.04em]";
   const inputCls =
-    "w-full px-2.5 py-2 border border-[#333] rounded-md bg-surface-2 text-text text-[13px] outline-none box-border";
+    "w-full px-2.5 py-2 border border-border-mid rounded-md bg-surface-2 text-text text-[13px] outline-none box-border";
   const textareaCls = `${inputCls} font-mono resize-y`;
   const btnPrimaryCls =
     "px-3.5 py-[9px] text-white border-none rounded-md cursor-pointer text-[13px] font-semibold w-full box-border transition-opacity";
@@ -406,7 +406,7 @@ const SettingsPage: React.FC = () => {
   const SaveChip: React.FC<{ status: string }> = ({ status }) => {
     if (status === "saving")
       return (
-        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#aaa]/10 text-[#aaa] border border-[#aaa]/20">
+        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface-2 text-text-muted border border-border-mid">
           Saving…
         </span>
       );
@@ -498,7 +498,7 @@ const SettingsPage: React.FC = () => {
                           upstream + (upstream.trim() ? "\n" : "") + r,
                         );
                       }}
-                      className="px-2 py-0.75 bg-border-dim text-[#bbb] border border-[#333] rounded cursor-pointer text-[11px] font-mono"
+                      className="px-2 py-0.75 bg-border-dim text-text-muted border border-border-mid rounded cursor-pointer text-[11px] font-mono"
                     >
                       {r}
                     </button>
@@ -545,7 +545,7 @@ const SettingsPage: React.FC = () => {
                   DNS Blocklist
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#aaa]/10 text-[#aaa] border border-[#aaa]/20">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface-2 text-text-muted border border-border-mid">
                     {blocklist.length} domains
                   </span>
                   <button
@@ -554,9 +554,11 @@ const SettingsPage: React.FC = () => {
                     title="Reload lists"
                     className="flex items-center justify-center w-6 h-6 p-0 rounded shrink-0 cursor-pointer text-[11px] transition-[color,border-color,background] duration-150 disabled:cursor-not-allowed"
                     style={{
-                      background: reloadLoading ? "#111" : "#1a211a",
-                      border: `1px solid ${reloadLoading ? "#333" : ACCENT}`,
-                      color: reloadLoading ? "#555" : ACCENT,
+                      background: reloadLoading
+                        ? "var(--color-surface-2)"
+                        : "var(--color-accent-dim)",
+                      border: `1px solid ${reloadLoading ? "var(--color-border-mid)" : ACCENT}`,
+                      color: reloadLoading ? "var(--color-text-ghost)" : ACCENT,
                     }}
                   >
                     <FaSyncAlt
@@ -578,7 +580,7 @@ const SettingsPage: React.FC = () => {
               {/* Predefined lists */}
               <div className="mb-2.5">
                 <label className={fieldLabelCls}>Predefined Blocklists</label>
-                <div className="max-h-55 overflow-y-auto border border-[#252525] rounded-[5px] bg-surface-2 mt-1">
+                <div className="max-h-55 overflow-y-auto border border-border-mid rounded-[5px] bg-surface-2 mt-1">
                   {predefined.map((item) => {
                     const active = activeSources.has(item.url);
                     const busy = sourceLoading === item.url;
@@ -588,7 +590,9 @@ const SettingsPage: React.FC = () => {
                         className="flex items-center gap-2.25 px-2.75 py-1.75 border-b border-surface-1 text-[12px] transition-[background] duration-150"
                         style={{
                           cursor: busy ? "wait" : "pointer",
-                          background: active ? "#1a211a" : "transparent",
+                          background: active
+                            ? "var(--color-accent-dim)"
+                            : "transparent",
                         }}
                       >
                         <input
@@ -601,7 +605,11 @@ const SettingsPage: React.FC = () => {
                         />
                         <span
                           className="flex-1 transition-[color] duration-150"
-                          style={{ color: active ? "#c8d4c6" : "#777" }}
+                          style={{
+                            color: active
+                              ? "var(--color-text-dim)"
+                              : "var(--color-text-faint)",
+                          }}
                         >
                           {item.name}
                         </span>
@@ -677,7 +685,7 @@ const SettingsPage: React.FC = () => {
                   max={3650}
                   value={retentionInput}
                   onChange={(e) => handleRetentionChange(e.target.value)}
-                  className="w-20 px-2.5 py-2 border border-[#333] rounded-md bg-surface-2 text-text text-[13px] outline-none box-border"
+                  className="w-20 px-2.5 py-2 border border-border-mid rounded-md bg-surface-2 text-text text-[13px] outline-none box-border"
                 />
                 <span className="text-[12px] text-text-muted">days</span>
               </div>

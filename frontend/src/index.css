@@ -20,6 +20,142 @@
     --color-danger-dim: #2a1414;
     --color-danger-border: #7a3333;
     --color-warn: #e67e22;
+    --color-warn-dim: #2a1e10;
+    --color-warn-border: #5a3a1a;
+    --color-success: #6a9e6a;
+    --color-success-dim: #1a2a1a;
+    --color-success-border: #2a4a2a;
+    --color-success-text: #80c080;
+    --color-info: #7a8fa0;
+    --color-info-dim: #1a1a2a;
+    --color-info-border: #2a2a3a;
+    --color-row: #1a1a1a;
+    --color-row-alt: #171717;
+    --color-row-blocked: #1e1212;
+    --color-row-blocked-alt: #1c1111;
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-panel: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] {
+    --color-accent: #798777;
+    --color-accent-dim: #1a211a;
+    --color-surface: #131313;
+    --color-surface-1: #1a1a1a;
+    --color-surface-2: #111;
+    --color-surface-3: #0f0f0f;
+    --color-border: #222;
+    --color-border-dim: #1e1e1e;
+    --color-border-mid: #2a2a2a;
+    --color-text: #e0e0e0;
+    --color-text-dim: #ccc;
+    --color-text-muted: #888;
+    --color-text-faint: #666;
+    --color-text-ghost: #555;
+    --color-text-dead: #444;
+    --color-danger: #c0392b;
+    --color-danger-dim: #2a1414;
+    --color-danger-border: #7a3333;
+    --color-warn: #e67e22;
+    --color-warn-dim: #2a1e10;
+    --color-warn-border: #5a3a1a;
+    --color-success: #6a9e6a;
+    --color-success-dim: #1a2a1a;
+    --color-success-border: #2a4a2a;
+    --color-success-text: #80c080;
+    --color-info: #7a8fa0;
+    --color-info-dim: #1a1a2a;
+    --color-info-border: #2a2a3a;
+    --color-row: #1a1a1a;
+    --color-row-alt: #171717;
+    --color-row-blocked: #1e1212;
+    --color-row-blocked-alt: #1c1111;
+    --shadow-card:
+        0 2px 8px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+    --shadow-panel:
+        0 2px 12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.03);
+
+    /* reason badges */
+    --color-reason-block-bg: #2a1a10;
+    --color-reason-block-fg: #e09060;
+    --color-reason-block-border: #6a3820;
+    --color-reason-allow-bg: #1a1f1a;
+    --color-reason-allow-fg: #798777;
+    --color-reason-allow-border: #3a4a3a;
+    --color-reason-blocklist-bg: #2a1a2a;
+    --color-reason-blocklist-fg: #c080c0;
+    --color-reason-blocklist-border: #502050;
+    --color-reason-phishing-bg: #3a1a10;
+    --color-reason-phishing-fg: #e08060;
+    --color-reason-phishing-border: #6a3020;
+    --color-reason-dga-bg: #1a1a3a;
+    --color-reason-dga-fg: #7080e0;
+    --color-reason-dga-border: #303060;
+    --color-reason-malware-bg: #3a1010;
+    --color-reason-malware-fg: #e07070;
+    --color-reason-malware-border: #6a2020;
+    --color-reason-ml-bg: #1e2a1e;
+    --color-reason-ml-fg: #80b080;
+    --color-reason-ml-border: #2a4a2a;
+}
+html[data-theme="light"] {
+    --color-accent: #798777;
+    --color-accent-dim: #e4efe4;
+    --color-surface: #ffffff;
+    --color-surface-1: #f7f7f7;
+    --color-surface-2: #f2f2f2;
+    --color-surface-3: #eaeaea;
+    --color-border: #d9d9d9;
+    --color-border-dim: #e4e4e4;
+    --color-border-mid: #cfcfcf;
+    --color-text: #1f1f1f;
+    --color-text-dim: #2f2f2f;
+    --color-text-muted: #5c5c5c;
+    --color-text-faint: #707070;
+    --color-text-ghost: #8a8a8a;
+    --color-text-dead: #9a9a9a;
+    --color-danger: #c0392b;
+    --color-danger-dim: #f8d7da;
+    --color-danger-border: #e5a7ad;
+    --color-warn: #e67e22;
+    --color-warn-dim: #fdebd3;
+    --color-warn-border: #e6b88a;
+    --color-success: #4a7a4a;
+    --color-success-dim: #e6f2e6;
+    --color-success-border: #9cc69c;
+    --color-success-text: #2f7a2f;
+    --color-info: #55718a;
+    --color-info-dim: #e9eef5;
+    --color-info-border: #c7d3e6;
+    --color-row: #ffffff;
+    --color-row-alt: #f7f7f7;
+    --color-row-blocked: #fdebeb;
+    --color-row-blocked-alt: #fff5f5;
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.12);
+    --shadow-panel: 0 2px 12px rgba(0, 0, 0, 0.18);
+
+    /* reason badges */
+    --color-reason-block-bg: #fde8d4;
+    --color-reason-block-fg: #a04020;
+    --color-reason-block-border: #e0a070;
+    --color-reason-allow-bg: #e4efe4;
+    --color-reason-allow-fg: #3a6a3a;
+    --color-reason-allow-border: #9cc69c;
+    --color-reason-blocklist-bg: #f1e2f1;
+    --color-reason-blocklist-fg: #6a2090;
+    --color-reason-blocklist-border: #c090c0;
+    --color-reason-phishing-bg: #fcdcd0;
+    --color-reason-phishing-fg: #a03010;
+    --color-reason-phishing-border: #e09070;
+    --color-reason-dga-bg: #dde0f5;
+    --color-reason-dga-fg: #303080;
+    --color-reason-dga-border: #8090c0;
+    --color-reason-malware-bg: #fbd5d5;
+    --color-reason-malware-fg: #8a1010;
+    --color-reason-malware-border: #d07070;
+    --color-reason-ml-bg: #e4efe4;
+    --color-reason-ml-fg: #2f7a2f;
+    --color-reason-ml-border: #9cc69c;
 }
 
 *,
@@ -38,8 +174,8 @@ body {
         Arial;
     margin: 0;
     padding: 0;
-    background: #131313;
-    color: #e0e0e0;
+    background: var(--color-surface-2);
+    color: var(--color-text);
 }
 
 @keyframes guardian-spin {
@@ -54,4 +190,12 @@ body {
 /* Tailwind doesn't know about our custom spin animation, define a utility */
 @utility spin-slow {
     animation: guardian-spin 0.8s linear infinite;
+}
+
+@utility shadow-card {
+    box-shadow: var(--shadow-card);
+}
+
+@utility shadow-panel {
+    box-shadow: var(--shadow-panel);
 }

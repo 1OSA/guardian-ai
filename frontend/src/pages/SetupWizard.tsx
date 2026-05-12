@@ -10,8 +10,8 @@ type CodeBlockProps = {
 };
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ text, id, copied, onCopy }) => (
-  <div className="relative bg-[#0d0d0d] border border-border-mid rounded-md mb-2">
-    <pre className="m-0 px-3 pt-2.5 pb-2.5 pr-12 font-mono text-[12px] text-[#c8d4c6] whitespace-pre-wrap break-all">
+  <div className="relative bg-surface-3 border border-border-mid rounded-md mb-2">
+    <pre className="m-0 px-3 pt-2.5 pb-2.5 pr-12 font-mono text-[12px] text-text-dim whitespace-pre-wrap break-all">
       {text}
     </pre>
     <button
@@ -20,7 +20,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ text, id, copied, onCopy }) => (
       className={`absolute top-1.5 right-1.5 border rounded text-[10px] px-1.75 py-0.5 cursor-pointer ${
         copied === id
           ? "bg-accent-dim border-accent text-accent"
-          : "bg-surface-1 border-[#333] text-text-ghost"
+          : "bg-surface-1 border-border-mid text-text-ghost"
       }`}
     >
       {copied === id ? "✓" : "Copy"}
@@ -49,9 +49,10 @@ const OSInstructionTabs: React.FC<{
             onClick={() => setActiveTab(key)}
             className="px-3 py-1 rounded-full border text-[12px] font-semibold cursor-pointer"
             style={{
-              border: `1px solid ${activeTab === key ? accent : "#333"}`,
-              background: activeTab === key ? "#1a211a" : "transparent",
-              color: activeTab === key ? accent : "#666",
+              border: `1px solid ${activeTab === key ? accent : "var(--color-border-mid)"}`,
+              background:
+                activeTab === key ? "var(--color-accent-dim)" : "transparent",
+              color: activeTab === key ? accent : "var(--color-text-faint)",
             }}
           >
             {instructions[key].label}
@@ -59,7 +60,7 @@ const OSInstructionTabs: React.FC<{
         ))}
       </div>
 
-      <div className="bg-surface-2 border border-border-mid rounded-lg p-3.5 mb-5 text-[12px] text-[#aaa] leading-[1.7]">
+      <div className="bg-surface-2 border border-border-mid rounded-lg p-3.5 mb-5 text-[12px] text-text-muted leading-[1.7]">
         {active.steps.map((s, i) =>
           s.code !== undefined ? (
             <CodeBlock
@@ -144,20 +145,22 @@ const SetupWizard: React.FC<{
 
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center p-5">
-      <div className="bg-surface-1 p-10 rounded-xl shadow-lg max-w-125 w-full box-border text-white">
+      <div className="bg-surface-1 p-10 rounded-xl shadow-lg max-w-125 w-full box-border text-text">
         {step === 1 && (
           <>
             <h2 className="mt-0 mb-2 text-xl font-bold">
               Welcome to Guardian AI DNS
             </h2>
-            <p className="text-[#aaa] mb-5">Let's set up your admin account.</p>
+            <p className="text-text-muted mb-5">
+              Let's set up your admin account.
+            </p>
             {error && <div className="text-red-400 mb-4 text-sm">{error}</div>}
             <div className="mb-4">
               <label className="block mb-1.5 text-sm text-text">Username</label>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full box-border px-2 py-2 border border-text-ghost rounded bg-surface text-white outline-none"
+                className="w-full box-border px-2 py-2 border border-border-mid rounded bg-surface-2 text-text outline-none"
               />
             </div>
             <div className="mb-4">
@@ -166,7 +169,7 @@ const SetupWizard: React.FC<{
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full box-border px-2 py-2 border border-text-ghost rounded bg-surface text-white outline-none"
+                className="w-full box-border px-2 py-2 border border-border-mid rounded bg-surface-2 text-text outline-none"
               />
             </div>
             <div className="mb-4">
@@ -177,7 +180,7 @@ const SetupWizard: React.FC<{
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full box-border px-2 py-2 border border-text-ghost rounded bg-surface text-white outline-none"
+                className="w-full box-border px-2 py-2 border border-border-mid rounded bg-surface-2 text-text outline-none"
               />
             </div>
             <button
@@ -193,10 +196,10 @@ const SetupWizard: React.FC<{
         {step === 2 && (
           <>
             <h2 className="mt-0 mb-2 text-xl font-bold">Setup Complete!</h2>
-            <p className="text-[#aaa] mb-5">
+            <p className="text-text-muted mb-5">
               Your DNS server is running at{" "}
               <code
-                className="bg-[#0d0d0d] px-1.5 py-0.5 rounded font-mono"
+                className="bg-surface-3 px-1.5 py-0.5 rounded font-mono"
                 style={{ color: accent }}
               >
                 {currentIP}

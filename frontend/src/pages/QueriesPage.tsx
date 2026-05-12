@@ -188,7 +188,7 @@ const QueriesPage: React.FC = () => {
 
   const pageBtnCls = (disabled: boolean) =>
     `px-2.5 py-1 bg-transparent border border-border-mid rounded-md text-[12px] cursor-pointer ${
-      disabled ? "text-[#333] cursor-default" : "text-text-muted"
+      disabled ? "text-text-dead cursor-default" : "text-text-muted"
     }`;
 
   return (
@@ -208,16 +208,22 @@ const QueriesPage: React.FC = () => {
             onClick={() => setLive((v) => !v)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold cursor-pointer"
             style={{
-              background: live ? "#1e2a1e" : "#1a1a1a",
-              color: live ? ACCENT : "#666",
-              border: `1px solid ${live ? ACCENT : "#333"}`,
+              background: live
+                ? "var(--color-accent-dim)"
+                : "var(--color-surface-1)",
+              color: live ? "var(--color-accent)" : "var(--color-text-faint)",
+              border: live
+                ? "1px solid var(--color-accent)"
+                : "1px solid var(--color-border-mid)",
             }}
           >
             <span
               className="w-1.75 h-1.75 rounded-full inline-block"
               style={{
-                background: live ? ACCENT : "#444",
-                boxShadow: live ? `0 0 6px ${ACCENT}` : "none",
+                background: live
+                  ? "var(--color-accent)"
+                  : "var(--color-text-dead)",
+                boxShadow: live ? "0 0 6px var(--color-accent)" : "none",
               }}
             />
             Live
@@ -225,7 +231,7 @@ const QueriesPage: React.FC = () => {
           {/* export */}
           <a
             href="/queries/export?limit=10000"
-            className="px-3 py-1.5 bg-surface-1 text-[#aaa] border border-[#333] rounded-md no-underline text-[12px] font-semibold"
+            className="px-3 py-1.5 bg-surface-1 text-text-muted border border-border-mid rounded-md no-underline text-[12px] font-semibold"
           >
             ↓ Export CSV
           </a>
@@ -251,7 +257,7 @@ const QueriesPage: React.FC = () => {
               }
             }}
             placeholder="Search domain or client IP…"
-            className="w-full box-border py-1.75 pl-8 pr-2.5 bg-surface-2 border border-border-mid rounded-md text-white text-[13px] outline-none"
+            className="w-full box-border py-1.75 pl-8 pr-2.5 bg-surface-2 border border-border-mid rounded-md text-text text-[13px] outline-none"
           />
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-ghost text-[13px] pointer-events-none">
             ⌕
@@ -278,16 +284,22 @@ const QueriesPage: React.FC = () => {
         <label
           className="flex items-center gap-1.5 cursor-pointer text-[13px] select-none px-3 py-1.5 rounded-md"
           style={{
-            color: blockedOnly ? "#e07070" : "#888",
-            background: blockedOnly ? "#2a1a1a" : "#1a1a1a",
-            border: `1px solid ${blockedOnly ? "#7a3333" : "#2a2a2a"}`,
+            color: blockedOnly
+              ? "var(--color-danger)"
+              : "var(--color-text-muted)",
+            background: blockedOnly
+              ? "var(--color-danger-dim)"
+              : "var(--color-surface-1)",
+            border: blockedOnly
+              ? "1px solid var(--color-danger-border)"
+              : "1px solid var(--color-border-mid)",
           }}
         >
           <input
             type="checkbox"
             checked={blockedOnly}
             onChange={(e) => setBlockedOnly(e.target.checked)}
-            style={{ accentColor: "#c0392b" }}
+            style={{ accentColor: "var(--color-danger)" }}
           />
           Blocked only
         </label>
@@ -296,7 +308,7 @@ const QueriesPage: React.FC = () => {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="py-1.75 px-2.5 bg-surface-2 border border-border-mid rounded-md text-[#aaa] text-[13px] cursor-pointer outline-none"
+          className="py-1.75 px-2.5 bg-surface-2 border border-border-mid rounded-md text-text-muted text-[13px] cursor-pointer outline-none"
         >
           {availableTypes.map((t) => (
             <option key={t} value={t}>
@@ -318,14 +330,18 @@ const QueriesPage: React.FC = () => {
           }}
           disabled={loading}
           className="px-3 py-1.75 bg-surface-1 border border-border-mid rounded-md text-[13px] cursor-pointer disabled:cursor-default"
-          style={{ color: loading ? "#444" : "#888" }}
+          style={{
+            color: loading
+              ? "var(--color-text-dead)"
+              : "var(--color-text-muted)",
+          }}
         >
           {loading ? "…" : "↻"}
         </button>
       </div>
 
       {/* ── table ── */}
-      <div className="bg-surface-1 border border-border-mid rounded-xl overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+      <div className="bg-surface-1 border border-border-mid rounded-xl overflow-hidden shadow-panel">
         <div className="overflow-x-auto">
           <QueryTable
             rows={rows}

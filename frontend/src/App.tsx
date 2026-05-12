@@ -22,7 +22,7 @@ const SetupWizardWrapper: React.FC<{ onComplete: () => void }> = ({
   const { refreshAuth } = useAuth();
   const navigate = useNavigate();
 
-  const handleComplete = async (_username: string, _password: string) => {
+  const handleComplete = async () => {
     // Setup endpoint creates a session and sets the cookie automatically
     // Just refresh the auth context to pick up the new session
     await refreshAuth();
