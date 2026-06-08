@@ -78,10 +78,6 @@ guardian-ai/
 - SQLite database for persistence
 - Query logging and statistics
 
-## License
-
-MIT
-
 ## Screenshots
 
 ![Clients-Guardian AI](REPORT_assets/Clients-Guardian%20AI.png)
@@ -90,3 +86,7 @@ MIT
 ![Services-Guardian AI](REPORT_assets/Services-Guardian%20AI.png)
 ![Settings-Guardian AI](REPORT_assets/Settings-Guardian%20AI.png)
 ![Threat Detection-Guardian AI](REPORT_assets/Threat%20Detection-Guardian%20AI.png)
+
+## License
+
+MIT
