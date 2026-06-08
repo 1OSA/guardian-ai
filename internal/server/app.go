@@ -1527,11 +1527,21 @@ func (srv *GuardianServer) handleMLClassify(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	srv.mlThresholdMu.RLock()
+	threshold := srv.mlThreshold
+	srv.mlThresholdMu.RUnlock()
+
+	meetsThreshold := float64(confidence) >= threshold
+	blockedEffective := isMalicious && meetsThreshold
+
 	srv.httpJSON(w, map[string]interface{}{
-		"domain":       domain,
-		"is_malicious": isMalicious,
-		"category":     category,
-		"confidence":   confidence,
+		"domain":            domain,
+		"is_malicious":      isMalicious,
+		"category":          category,
+		"confidence":        confidence,
+		"threshold":         threshold,
+		"meets_threshold":   meetsThreshold,
+		"blocked_effective": blockedEffective,
 	}, http.StatusOK)
 }
 
