@@ -80,12 +80,12 @@ guardian-ai/
 
 ## Screenshots
 
-![Clients-Guardian AI](REPORT_assets/Clients-Guardian AI.png)
 ![DASHBOARD-Guardian AI](REPORT_assets/DASHBOARD-Guardian AI.png)
 ![Query-log-Guardian AI](REPORT_assets/Query-log-Guardian AI.png)
+![Clients-Guardian AI](REPORT_assets/Clients-Guardian AI.png)
 ![Services-Guardian AI](REPORT_assets/Services-Guardian AI.png)
-![Settings-Guardian AI](REPORT_assets/Settings-Guardian AI.png)
 ![Threat Detection-Guardian AI](REPORT_assets/Threat Detection-Guardian AI.png)
+![Settings-Guardian AI](REPORT_assets/Settings-Guardian AI.png)
 
 ## License
 
